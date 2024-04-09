@@ -1,7 +1,7 @@
-
+mod database;
 use std::collections::HashMap;
 
-use actix_web::{web, App, HttpRequest, HttpServer, Responder, middleware};
+use actix_web::{middleware, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 
 async fn index(req: HttpRequest) -> impl Responder {
     let missing = "MISSING".to_string();
@@ -13,7 +13,12 @@ async fn index(req: HttpRequest) -> impl Responder {
     println!("Term: {}", term.clone());
     println!("Reading: {}", reading.clone());
 
-    "Hello world!" 
+    let result = database::query_database(&term, &reading).await.unwrap();
+    let result_json = serde_json::to_string_pretty(&result).unwrap();
+    println!("{:?}", result_json);
+
+   HttpResponse::Ok().body("Test") 
+
 }
 
 #[actix_web::main]
