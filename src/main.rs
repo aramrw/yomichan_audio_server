@@ -13,7 +13,7 @@ async fn index(req: HttpRequest) -> impl Responder {
     println!("Term: {}", term.clone());
     println!("Reading: {}", reading.clone());
 
-    let result = database::query_database(&term, &reading).await.unwrap();
+    let result = database::query_database(term, reading).await.unwrap();
     let result_json = serde_json::to_string_pretty(&result).unwrap();
     println!("{:?}", result_json);
 

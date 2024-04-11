@@ -31,9 +31,9 @@ pub async fn query_database(
 
         query_entries.push(Entry {
             expression: row.try_get("expression").unwrap_or_default(),
-            reading: reading,
+            reading,
             source: row.get("source"),
-            speaker: speaker,
+            speaker,
             display: row.get("display"),
         });
     });
