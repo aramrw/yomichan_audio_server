@@ -3,6 +3,7 @@ use actix_web::{
     http::header::ContentType, middleware, web, App, HttpRequest, HttpResponse, HttpServer,
     Responder,
 };
+use actix_files;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -152,6 +153,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
             .wrap(middleware::Logger::default())
+            .service(actix_files::Files::new("/audio", "audio"))
             .route("/", web::get().to(index))
     })
     .bind("localhost:8080")?
