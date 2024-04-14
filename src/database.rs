@@ -1,21 +1,18 @@
 use serde::{Deserialize, Serialize};
-use sqlx::{ sqlite::SqlitePool, Error, Row};
+use sqlx::{sqlite::SqlitePool, Error, Row};
 
-#[derive(Deserialize, Serialize)]
+#[derive(Default, Deserialize, Serialize, Debug)]
 pub struct Entry {
-    expression: String,
-    reading: Option<String>,
-    source: String,
-    speaker: Option<String>,
-    display: String,
+    pub expression: String,
+    pub reading: Option<String>,
+    pub source: String,
+    pub speaker: Option<String>,
+    pub display: String,
+    pub file: String,
 }
 
-pub async fn query_database(
-    term: &str,
-    reading: &str,
-) -> Result<Vec<Entry>, Error> {
-
-    let sqlite_pool = SqlitePool::connect("./entries.db").await?;
+pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, Error> {
+    let sqlite_pool = SqlitePool::connect("./audio/entries.db").await?;
 
     let result = sqlx::query("SELECT * FROM entries WHERE expression = ? AND reading = ?")
         .bind(term)
@@ -29,12 +26,17 @@ pub async fn query_database(
         let reading: Option<String> = row.try_get("reading").unwrap_or_default();
         let speaker: Option<String> = row.try_get("speaker").unwrap_or_default();
 
+        // file starts with the folder name so cut it out
+        let mut file: String = row.get("file");
+        file = file.rsplit_once("\\").unwrap().1.to_string();
+
         query_entries.push(Entry {
             expression: row.try_get("expression").unwrap_or_default(),
             reading,
             source: row.get("source"),
             speaker,
             display: row.get("display"),
+            file,
         });
     });
 
