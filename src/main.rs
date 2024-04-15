@@ -46,30 +46,30 @@ fn find_audio_file(entry: &database::Entry) -> Option<AudioSource> {
     //println!("Searching for file: {}", entry.file);
 
     if entry.source == "shinmeikai8" {
-        let jpod_dir_path = "audio/shinmeikai8_files/media";
-        let jpod_dir = std::fs::read_dir(jpod_dir_path);
+        let shinmeikai_dir_path = "audio/shinmeikai8_files/media";
+        let shinmeikai_dir = std::fs::read_dir(shinmeikai_dir_path);
 
-        for file in jpod_dir.unwrap() {
+        for file in shinmeikai_dir.unwrap() {
             let file = file.unwrap();
             if file.file_name() == *entry.file {
-                println!("Found file: {:?}", file.file_name());
+                //println!("Found file: {:?}", file.file_name());
                 let audio_source =
-                    construct_audio_source("jpod", jpod_dir_path, &entry.file);
+                    construct_audio_source("smk", &entry.display, shinmeikai_dir_path, &entry.file);
                 return Some(audio_source);
             }
         }
     }
 
     if entry.source == "nhk16" {
-        let jpod_dir_path = "audio/nhk16_files/media";
-        let jpod_dir = std::fs::read_dir(jpod_dir_path);
+        let nhk16_dir_path = "audio/nhk16_files/media";
+        let nhk16_dir = std::fs::read_dir(nhk16_dir_path);
 
-        for file in jpod_dir.unwrap() {
+        for file in nhk16_dir.unwrap() {
             let file = file.unwrap();
             if file.file_name() == *entry.file {
-                println!("Found file: {:?}", file.file_name());
+                //println!("Found file: {:?}", file.file_name());
                 let audio_source =
-                    construct_audio_source(&entry.display, jpod_dir_path, &entry.file);
+                    construct_audio_source("nhk", &entry.display, nhk16_dir_path, &entry.file);
                 return Some(audio_source);
             }
         }
@@ -82,15 +82,30 @@ fn find_audio_file(entry: &database::Entry) -> Option<AudioSource> {
         for file in jpod_dir.unwrap() {
             let file = file.unwrap();
             if file.file_name() == *entry.file {
-                println!("Found file: {:?}", file.file_name());
+                //println!("Found file: {:?}", file.file_name());
                 let audio_source =
-                    construct_audio_source(&entry.display, jpod_dir_path, &entry.file);
+                    construct_audio_source("jpod", "", jpod_dir_path, &entry.file);
                 return Some(audio_source);
             }
         }
     }
 
     None
+}
+
+fn construct_audio_source(dict_name: &str, entry_display: &str, main_dir: &str, file_name: &str) -> AudioSource {
+    if entry_display.is_empty() {
+        return AudioSource {
+            name: dict_name.to_string(),
+            url: format!("http://localhost:8080/{}/{}", main_dir, file_name),
+        };
+    }
+
+    let display = format!("{} - {}", dict_name, entry_display);
+    AudioSource {
+        name: display, 
+        url: format!("http://localhost:8080/{}/{}", main_dir, file_name),
+    }
 }
 
 async fn index(req: HttpRequest) -> impl Responder {
@@ -147,12 +162,6 @@ async fn index(req: HttpRequest) -> impl Responder {
     HttpResponse::Ok()
         .content_type(ContentType::json())
         .json(resp)
-}
-fn construct_audio_source(entry_display: &str, main_dir: &str, file_name: &str) -> AudioSource {
-    AudioSource {
-        name: entry_display.to_string(),
-        url: format!("http://localhost:8080/{}/{}", main_dir, file_name),
-    }
 }
 
 #[actix_web::main]
