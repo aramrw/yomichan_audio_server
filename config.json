@@ -1,4 +1,5 @@
 {
-  "exit_minutes": 2,
+  "exit_minutes": 30,
+  "exit_browser": false,
   "debug": false
 }

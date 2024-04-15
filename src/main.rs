@@ -59,7 +59,6 @@ async fn index(req: HttpRequest) -> impl Responder {
         .json(resp)
 }
 
-
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let config = config::create_config();
@@ -77,10 +76,20 @@ async fn main() -> std::io::Result<()> {
     .bind("localhost:8080")?
     .run();
 
+    // exit timer thread
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(60)).await; // Check every minute
-            if timer.elapsed().as_secs() / 60 >= config.exit_minutes {
+            if timer.elapsed().as_secs() / 60 >= config.exit_minutes && config.exit_browser {
+                    // dont close the program if a browser is open
+                    if config::is_browser_open() {
+                        println!("Browser is open, not exiting");
+                        continue;
+                    } else {
+                        println!("Exiting after {} minutes", config.exit_minutes);
+                        std::process::exit(0);
+                    }
+            } else if timer.elapsed().as_secs() / 60 >= config.exit_minutes {
                 println!("Exiting after {} minutes", config.exit_minutes);
                 std::process::exit(0);
             }
@@ -89,4 +98,3 @@ async fn main() -> std::io::Result<()> {
 
     server.await
 }
-
