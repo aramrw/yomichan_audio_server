@@ -28,7 +28,7 @@ pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, Err
 
         // file starts with the folder name so cut it out
         let mut file: String = row.get("file");
-        file = file.rsplit_once("\\").unwrap().1.to_string();
+        file = file.rsplit_once('\\').unwrap().1.to_string();
 
         query_entries.push(Entry {
             expression: row.try_get("expression").unwrap_or_default(),

@@ -12,7 +12,6 @@ struct AudioSource {
     url: String,
 }
 
-
 fn map_entry_object(word_object: &serde_json::Value) -> Option<database::Entry> {
     let mut word_entry = database::Entry::default();
 
@@ -47,9 +46,9 @@ fn find_audio_file(entry: &database::Entry) -> Option<AudioSource> {
 
     if entry.source == "shinmeikai8" {
         let shinmeikai_dir_path = "audio/shinmeikai8_files/media";
-        let shinmeikai_dir = std::fs::read_dir(shinmeikai_dir_path);
+        let shinmeikai_dir = std::fs::read_dir(shinmeikai_dir_path).unwrap();
 
-        for file in shinmeikai_dir.unwrap() {
+        for file in shinmeikai_dir {
             let file = file.unwrap();
             if file.file_name() == *entry.file {
                 //println!("Found file: {:?}", file.file_name());
@@ -62,9 +61,9 @@ fn find_audio_file(entry: &database::Entry) -> Option<AudioSource> {
 
     if entry.source == "nhk16" {
         let nhk16_dir_path = "audio/nhk16_files/media";
-        let nhk16_dir = std::fs::read_dir(nhk16_dir_path);
+        let nhk16_dir = std::fs::read_dir(nhk16_dir_path).unwrap();
 
-        for file in nhk16_dir.unwrap() {
+        for file in nhk16_dir {
             let file = file.unwrap();
             if file.file_name() == *entry.file {
                 //println!("Found file: {:?}", file.file_name());
@@ -77,15 +76,37 @@ fn find_audio_file(entry: &database::Entry) -> Option<AudioSource> {
 
     if entry.source == "jpod" {
         let jpod_dir_path = "audio/jpod_files/audio";
-        let jpod_dir = std::fs::read_dir(jpod_dir_path);
+        let jpod_dir = std::fs::read_dir(jpod_dir_path).unwrap();
 
-        for file in jpod_dir.unwrap() {
+        for file in jpod_dir {
             let file = file.unwrap();
             if file.file_name() == *entry.file {
                 //println!("Found file: {:?}", file.file_name());
-                let audio_source =
-                    construct_audio_source("jpod", "", jpod_dir_path, &entry.file);
+                let audio_source = construct_audio_source("jpod", "", jpod_dir_path, &entry.file);
                 return Some(audio_source);
+            }
+        }
+    }
+
+    if entry.source == "forvo" {
+        let forvo_dir_paths = [
+            "audio/forvo_files/strawberrybrown",
+            "audio/forvo_files/kaoring",
+            "audio/forvo_files/poyotan",
+            "audio/forvo_files/akimoto",
+            "audio/forvo_files/skent",
+        ];
+
+        for dir in forvo_dir_paths.iter() {
+            let forvo_dir = std::fs::read_dir(dir).unwrap();
+
+            for file in forvo_dir {
+                let file = file.unwrap();
+                if file.file_name() == *entry.file {
+                    //println!("Found file: {:?}", file.file_name());
+                    let audio_source = construct_audio_source(entry.speaker.as_ref().unwrap(), "", dir, &entry.file);
+                    return Some(audio_source);
+                }
             }
         }
     }
@@ -93,7 +114,12 @@ fn find_audio_file(entry: &database::Entry) -> Option<AudioSource> {
     None
 }
 
-fn construct_audio_source(dict_name: &str, entry_display: &str, main_dir: &str, file_name: &str) -> AudioSource {
+fn construct_audio_source(
+    dict_name: &str,
+    entry_display: &str,
+    main_dir: &str,
+    file_name: &str,
+) -> AudioSource {
     if entry_display.is_empty() {
         return AudioSource {
             name: dict_name.to_string(),
@@ -103,7 +129,7 @@ fn construct_audio_source(dict_name: &str, entry_display: &str, main_dir: &str, 
 
     let display = format!("{} - {}", dict_name, entry_display);
     AudioSource {
-        name: display, 
+        name: display,
         url: format!("http://localhost:8080/{}/{}", main_dir, file_name),
     }
 }
@@ -151,7 +177,7 @@ async fn index(req: HttpRequest) -> impl Responder {
 
     // https://github.com/FooSoft/yomichan/blob/master/ext/data/schemas/custom-audio-list-schema.json
     // construct the JSON response yomitan is expecting
-    
+
     let resp = serde_json::json!({
         "type": "audioSourceList",
         "audioSources": audio_sources_list
@@ -176,17 +202,3 @@ async fn main() -> std::io::Result<()> {
     .run()
     .await
 }
-
-// if entry.source == "forvo" {
-//
-//     let forvo_dir = std::fs::read_dir(
-//     "C:\\Users\\arami\\AppData\\Roaming\\Anki2\\addons21\\1045800357\\user_files\\forvo_files",
-// );
-//
-//     forvo_dir.unwrap().for_each(|file| {
-//         let file = file.unwrap();
-//         if file.file_name() == *entry.file {
-//             println!("Found file: {:?}", file.file_name());
-//         }
-//     })
-// }
