@@ -1,3 +1,4 @@
+mod config;
 mod database;
 mod helper;
 use actix_web::{
@@ -5,6 +6,7 @@ use actix_web::{
     Responder,
 };
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 async fn index(req: HttpRequest) -> impl Responder {
     let missing = "MISSING".to_string();
@@ -57,15 +59,31 @@ async fn index(req: HttpRequest) -> impl Responder {
         .json(resp)
 }
 
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    HttpServer::new(|| {
+    let config = config::create_config();
+    let timer = Instant::now();
+
+    let server = HttpServer::new(|| {
         App::new()
             .wrap(middleware::Logger::default())
             .service(actix_files::Files::new("/audio", "audio"))
             .route("/", web::get().to(index))
     })
     .bind("localhost:8080")?
-    .run()
-    .await
+    .run();
+
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(60)).await; // Check every minute
+            if timer.elapsed().as_secs() / 60 >= config.exit_minutes {
+                println!("Exiting after {} minutes", config.exit_minutes);
+                std::process::exit(0);
+            }
+        }
+    });
+
+    server.await
 }
+
