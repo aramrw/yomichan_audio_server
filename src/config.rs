@@ -48,3 +48,16 @@ pub fn handle_debugger(config: &Config) {
     }
 }
 
+pub fn kill_previous_instance() {
+    let mut sys = sysinfo::System::new_all();
+
+    sys.refresh_all();
+
+    for (pid, proc) in sys.processes() {
+        if proc.name().contains("yomichan_audio_server") && pid.as_u32() != std::process::id() {
+                println!("Killing previous instance with PID: {}", pid);
+                proc.kill();
+            }
+    }
+        
+}

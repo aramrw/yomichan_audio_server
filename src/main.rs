@@ -64,6 +64,8 @@ async fn index(req: HttpRequest) -> impl Responder {
 async fn main() -> std::io::Result<()> {
     let config = config::create_config();
     config::handle_debugger(&config);
+    config::kill_previous_instance();
+
     let timer = Instant::now();
 
     let server = HttpServer::new(|| {

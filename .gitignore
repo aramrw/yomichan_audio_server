@@ -1,3 +1,4 @@
 /target
 /audio/*
 yomichan_audio_server.exe
+config.json
