@@ -3,7 +3,6 @@ use actix_web::{
     http::header::ContentType, middleware, web, App, HttpRequest, HttpResponse, HttpServer,
     Responder,
 };
-use actix_files;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -11,6 +10,87 @@ use std::collections::HashMap;
 struct AudioSource {
     name: String,
     url: String,
+}
+
+
+fn map_entry_object(word_object: &serde_json::Value) -> Option<database::Entry> {
+    let mut word_entry = database::Entry::default();
+
+    match word_object {
+        serde_json::Value::Object(map) => {
+            for (key, value) in map {
+                if key == "expression" {
+                    word_entry.expression = value.as_str().unwrap_or("").to_string();
+                } else if key == "reading" {
+                    word_entry.reading = Some(value.as_str().unwrap_or("").to_string());
+                } else if key == "source" {
+                    word_entry.source = value.as_str().unwrap_or("").to_string();
+                } else if key == "speaker" {
+                    word_entry.speaker = Some(value.as_str().unwrap_or("").to_string());
+                } else if key == "display" {
+                    word_entry.display = value.as_str().unwrap_or("").to_string();
+                } else if key == "file" {
+                    word_entry.file = value.as_str().unwrap_or("").to_string();
+                }
+            }
+        }
+        _ => eprintln!("Not an object"),
+    }
+
+    //println!("{:?}", serde_json::to_string_pretty(&word_entry).unwrap());
+
+    Some(word_entry)
+}
+
+fn find_audio_file(entry: &database::Entry) -> Option<AudioSource> {
+    //println!("Searching for file: {}", entry.file);
+
+    if entry.source == "shinmeikai8" {
+        let jpod_dir_path = "audio/shinmeikai8_files/media";
+        let jpod_dir = std::fs::read_dir(jpod_dir_path);
+
+        for file in jpod_dir.unwrap() {
+            let file = file.unwrap();
+            if file.file_name() == *entry.file {
+                println!("Found file: {:?}", file.file_name());
+                let audio_source =
+                    construct_audio_source("jpod", jpod_dir_path, &entry.file);
+                return Some(audio_source);
+            }
+        }
+    }
+
+    if entry.source == "nhk16" {
+        let jpod_dir_path = "audio/nhk16_files/media";
+        let jpod_dir = std::fs::read_dir(jpod_dir_path);
+
+        for file in jpod_dir.unwrap() {
+            let file = file.unwrap();
+            if file.file_name() == *entry.file {
+                println!("Found file: {:?}", file.file_name());
+                let audio_source =
+                    construct_audio_source(&entry.display, jpod_dir_path, &entry.file);
+                return Some(audio_source);
+            }
+        }
+    }
+
+    if entry.source == "jpod" {
+        let jpod_dir_path = "audio/jpod_files/audio";
+        let jpod_dir = std::fs::read_dir(jpod_dir_path);
+
+        for file in jpod_dir.unwrap() {
+            let file = file.unwrap();
+            if file.file_name() == *entry.file {
+                println!("Found file: {:?}", file.file_name());
+                let audio_source =
+                    construct_audio_source(&entry.display, jpod_dir_path, &entry.file);
+                return Some(audio_source);
+            }
+        }
+    }
+
+    None
 }
 
 async fn index(req: HttpRequest) -> impl Responder {
@@ -54,93 +134,20 @@ async fn index(req: HttpRequest) -> impl Responder {
         }
     }
 
-    println!("{:?}", audio_sources_list);
+    // https://github.com/FooSoft/yomichan/blob/master/ext/data/schemas/custom-audio-list-schema.json
+    // construct the JSON response yomitan is expecting
+    
+    let resp = serde_json::json!({
+        "type": "audioSourceList",
+        "audioSources": audio_sources_list
+    });
+
+    // writing the JSON contents with UTF-8 encoding
 
     HttpResponse::Ok()
         .content_type(ContentType::json())
-        .body("Test")
+        .json(resp)
 }
-
-fn map_entry_object(word_object: &serde_json::Value) -> Option<database::Entry> {
-    let mut word_entry = database::Entry::default();
-
-    match word_object {
-        serde_json::Value::Object(map) => {
-            for (key, value) in map {
-                if key == "expression" {
-                    word_entry.expression = value.as_str().unwrap_or("").to_string();
-                } else if key == "reading" {
-                    word_entry.reading = Some(value.as_str().unwrap_or("").to_string());
-                } else if key == "source" {
-                    word_entry.source = value.as_str().unwrap_or("").to_string();
-                } else if key == "speaker" {
-                    word_entry.speaker = Some(value.as_str().unwrap_or("").to_string());
-                } else if key == "display" {
-                    word_entry.display = value.as_str().unwrap_or("").to_string();
-                } else if key == "file" {
-                    word_entry.file = value.as_str().unwrap_or("").to_string();
-                }
-            }
-        }
-        _ => eprintln!("Not an object"),
-    }
-
-    //println!("{:?}", serde_json::to_string_pretty(&word_entry).unwrap());
-
-    Some(word_entry)
-}
-
-fn find_audio_file(entry: &database::Entry) -> Option<AudioSource> {
-    //println!("Searching for file: {}", entry.file);
-
-    if entry.source == "shinmeikai8" {
-        let jpod_dir_path = "audio/shinmeikai8_files/media";
-        let jpod_dir = std::fs::read_dir(jpod_dir_path);
-
-        for file in jpod_dir.unwrap() {
-            let file = file.unwrap();
-            if file.file_name() == *entry.file {
-                println!("Found file: {:?}", file.file_name());
-                let audio_source =
-                    construct_audio_source(&entry.display, jpod_dir_path, &entry.file);
-                return Some(audio_source);
-            }
-        }
-    }
-
-    if entry.source == "nhk16" {
-        let jpod_dir_path = "audio/nhk16_files/media";
-        let jpod_dir = std::fs::read_dir(jpod_dir_path);
-
-        for file in jpod_dir.unwrap() {
-            let file = file.unwrap();
-            if file.file_name() == *entry.file {
-                println!("Found file: {:?}", file.file_name());
-                let audio_source =
-                    construct_audio_source(&entry.display, jpod_dir_path, &entry.file);
-                return Some(audio_source);
-            }
-        }
-    }
-
-    if entry.source == "jpod" {
-        let jpod_dir_path = "audio/jpod_files/audio";
-        let jpod_dir = std::fs::read_dir(jpod_dir_path);
-
-        for file in jpod_dir.unwrap() {
-            let file = file.unwrap();
-            if file.file_name() == *entry.file {
-                println!("Found file: {:?}", file.file_name());
-                let audio_source =
-                    construct_audio_source(&entry.display, jpod_dir_path, &entry.file);
-                return Some(audio_source);
-            }
-        }
-    }
-
-    None
-}
-
 fn construct_audio_source(entry_display: &str, main_dir: &str, file_name: &str) -> AudioSource {
     AudioSource {
         name: entry_display.to_string(),
