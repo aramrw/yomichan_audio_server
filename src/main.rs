@@ -63,6 +63,7 @@ async fn index(req: HttpRequest) -> impl Responder {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let config = config::create_config();
+    config::handle_debugger(&config);
     let timer = Instant::now();
 
     let server = HttpServer::new(|| {

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use std::os::windows::process::CommandExt;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
@@ -29,3 +30,21 @@ fn get_config() -> Config {
 
     config
 }
+
+#[cfg(target_os = "windows")]
+pub fn handle_debugger(config: &Config) {
+    let args: Vec<String> = std::env::args().collect();
+    let is_secondary_instance = args.len() > 1 && args[1] == "debug";
+
+    if !is_secondary_instance && !config.debug {
+        // main terminal 
+        std::process::Command::new("yomichan_audio_server.exe")
+            .arg("debug")
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
+            .spawn()
+            .unwrap();
+
+        std::process::exit(0);
+    }
+}
+

@@ -2252,7 +2252,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32b752e52a2da0ddfbdbcc6fceadfeede4c939ed16d13e648833a61dfb611ed8"
 
 [[package]]
-name = "yomichan_http_server"
+name = "yomichan_audio_server"
 version = "0.1.0"
 dependencies = [
  "actix-files",

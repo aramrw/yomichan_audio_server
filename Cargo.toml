@@ -1,5 +1,5 @@
 [package]
-name = "yomichan_http_server"
+name = "yomichan_audio_server"
 version = "0.1.0"
 edition = "2021"
 
