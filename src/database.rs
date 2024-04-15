@@ -14,11 +14,18 @@ pub struct Entry {
 pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, Error> {
     let sqlite_pool = SqlitePool::connect("./audio/entries.db").await?;
 
-    let result = sqlx::query("SELECT * FROM entries WHERE expression = ? AND reading = ?")
+    let mut result = sqlx::query("SELECT * FROM entries WHERE expression = ? AND reading = ?")
         .bind(term)
         .bind(reading)
         .fetch_all(&sqlite_pool)
         .await?;
+
+    if result.is_empty() {
+        result = sqlx::query("SELECT * FROM entries WHERE expression = ?")
+            .bind(term)
+            .fetch_all(&sqlite_pool)
+            .await?; 
+    }
 
     let mut query_entries: Vec<Entry> = Vec::new();
 
