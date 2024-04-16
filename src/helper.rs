@@ -120,7 +120,7 @@ fn construct_audio_source(
         };
     }
 
-    let display = format!("{} - {}", dict_name, entry_display);
+    let display = format!("{} {}", dict_name, entry_display);
     AudioSource {
         name: display,
         url: format!("http://localhost:8080/{}/{}", main_dir, file_name),
