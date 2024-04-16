@@ -1,7 +1,7 @@
 use crate::database;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct AudioSource {
     name: String,
     url: String,
@@ -82,22 +82,27 @@ pub fn find_audio_file(entry: &database::Entry) -> Option<AudioSource> {
     }
 
     if entry.source == "forvo" {
-        let forvo_dir_paths = [
-            "audio/forvo_files/strawberrybrown",
-            "audio/forvo_files/kaoring",
-            "audio/forvo_files/poyotan",
-            "audio/forvo_files/akimoto",
-            "audio/forvo_files/skent",
-        ];
+        let forvo_speakers = ["strawberrybrown", "kaoring", "poyotan", "akitomo", "skent"];
 
-        for dir in forvo_dir_paths.iter() {
-            let forvo_dir = std::fs::read_dir(dir).unwrap();
+        for speaker in forvo_speakers.iter() {
+            if speaker != entry.speaker.as_ref().unwrap() {
+                continue;
+            }
+
+            //println!("Checking dir: {}", dir);
+            let format_dir = format!("audio/forvo_files/{}", speaker);
+            let forvo_dir = std::fs::read_dir(&format_dir).unwrap();
 
             for file in forvo_dir {
                 let file = file.unwrap();
                 if file.file_name() == *entry.file {
-                    //println!("Found file: {:?}", file.file_name());
-                    let audio_source = construct_audio_source(entry.speaker.as_ref().unwrap(), "", dir, &entry.file);
+                    //println!("Found file: {:?} in {}", file.file_name(), &format_dir);
+                    let audio_source = construct_audio_source(
+                        entry.speaker.as_ref().unwrap(),
+                        "",
+                        &format_dir,
+                        &entry.file,
+                    );
                     return Some(audio_source);
                 }
             }
@@ -126,5 +131,3 @@ fn construct_audio_source(
         url: format!("http://localhost:8080/{}/{}", main_dir, file_name),
     }
 }
-
-
