@@ -21,7 +21,7 @@ pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, Err
         .await?;
 
     let forvo_result =
-        sqlx::query("SELECT * FROM entries WHERE expression = ? AND source = 'forvo'")
+        sqlx::query("SELECT * FROM entries WHERE expression = ? AND source = 'forvo' ORDER BY speaker DESC")
             .bind(term)
             .fetch_all(&sqlite_pool)
             .await?;
@@ -63,6 +63,14 @@ pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, Err
             file,
         });
     });
+
+    query_entries.sort_by(|a, b| {
+        let order = ["nhk16", "shinmeikai8", "forvo", "jpod"]; 
+        let a_index = order.iter().position(|&x| x == a.source).unwrap();
+        let b_index = order.iter().position(|&x| x == b.source).unwrap();
+        a_index.cmp(&b_index)
+    });
+     
 
     Ok(query_entries)
 }
