@@ -97,3 +97,25 @@ async fn create_test_table(pool: &sqlx::SqlitePool) {
     .unwrap();
 }
 
+async fn entry_exists(transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>, entry: &Entry) -> bool {
+    let rows = sqlx::query(
+        "
+        SELECT * 
+        FROM entries 
+        WHERE 
+        expression = ? AND
+        reading = ? AND
+        source = ? AND
+        file = ?",
+    )
+    .bind(&entry.expression)
+    .bind(&entry.reading)
+    .bind(&entry.source)
+    .bind(&entry.file)
+    .fetch_all(&mut **transaction)
+    .await
+    .unwrap();
+
+    !rows.is_empty()
+}
+
