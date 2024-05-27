@@ -51,3 +51,31 @@ async fn main() {
     let mut transaction = pool.begin().await.unwrap();
     let mut count = 0;
 
+    for json in stream {
+        let json = json.unwrap();
+        for file in &json.files {
+            for expression in &json.headwords {
+                for path in expression.1 {
+                    if path == file.0 {
+                        let display = format_pitch_display(&file.1.pitch_pattern, &file.1.pitch_number);
+                        let entry = Entry {
+                            expression: expression.0.clone(),
+                            reading: Some(file.1.kana_reading.clone()),
+                            source: "daijisen".to_string(),
+                            speaker: None,
+                            display,
+                            file: path.to_string(),
+                        };
+
+                        insert_entry(&mut transaction, entry).await;
+                        count += 1;
+                    }
+                }
+            }
+        }
+        print!("\rAdded {} out of {}          ", count, &json.files.len());
+    }
+
+    transaction.commit().await.unwrap();
+}
+
