@@ -119,3 +119,29 @@ async fn entry_exists(transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>, ent
     !rows.is_empty()
 }
 
+async fn insert_entry(transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>, entry: Entry) {
+    if !entry_exists(transaction, &entry).await {
+        sqlx::query(
+            "
+        INSERT into entries 
+        (expression, reading, source, speaker, display, file) 
+        VALUES 
+        (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(entry.expression)
+        .bind(entry.reading)
+        .bind(entry.source)
+        .bind(entry.speaker)
+        .bind(entry.display)
+        .bind(entry.file)
+        .execute(&mut **transaction)
+        .await
+        .unwrap();
+    }
+}
+
+fn format_pitch_display(pattern: &str, number: &str) -> String {
+    let mut pattern = pattern.replace('↓', "＼");
+    pattern = pattern.replace('○', "");
+    format!("{} [{}]", pattern.trim(), number)
+}
