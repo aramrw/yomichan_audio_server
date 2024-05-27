@@ -36,3 +36,5 @@ struct IndexJson {
     files: HashMap<String, EntryFile>,
 }
 
+#[tokio::main]
+async fn main() {
