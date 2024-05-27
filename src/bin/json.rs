@@ -79,3 +79,21 @@ async fn main() {
     transaction.commit().await.unwrap();
 }
 
+async fn create_test_table(pool: &sqlx::SqlitePool) {
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS entries 
+    (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, 
+        expression TEXT NOT NULL,
+        reading TEXT,
+        source TEXT NOT NULL,
+        speaker TEXT,
+        display TEXT,
+        file TEXT NOT NULL
+    )",
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
