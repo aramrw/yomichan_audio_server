@@ -22,3 +22,10 @@ struct Meta {
     media_dir: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct EntryFile {
+    kana_reading: String,
+    pitch_pattern: String,
+    pitch_number: String,
+}
+
