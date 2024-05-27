@@ -38,3 +38,16 @@ struct IndexJson {
 
 #[tokio::main]
 async fn main() {
+    const INDEX_PATH: &str = "C:\\Users\\arami\\Desktop\\index.json";
+    let file = File::open(INDEX_PATH).unwrap();
+    let reader = BufReader::new(file);
+    let stream = Deserializer::from_reader(reader).into_iter::<IndexJson>();
+
+    let pool = sqlx::SqlitePool::connect("F:\\Programming\\Rust\\yomichan_http_server\\audio\\entries.db")
+        .await
+        .unwrap();
+    create_test_table(&pool).await;
+
+    let mut transaction = pool.begin().await.unwrap();
+    let mut count = 0;
+
