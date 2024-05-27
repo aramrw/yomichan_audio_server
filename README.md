@@ -8,7 +8,11 @@
 - **`大辞泉`** (~**908** MB) - _**61,521** files_
 - **`Forvo`** (~**717** MB) - _**78,835** files_
 - **`新明解８版`** (~**588** MB) - _**66,726** files_
-### Installation & Use
+### Add Audio Server to Yomichan/Yomitan
+- Paste `http://localhost:8080/?term={term}&reading={reading}` as an audio source just like in the gif below 👇
+<img  src="https://github.com/aramrw/yomichan_audio_server/assets/106574385/0f399e59-f3d4-4b6b-a54e-6daceb6bc582" width="720" />
+
+### Installation 
 - Download **`yomichan_audio_server_v0.3.0.rar`** from the **[Releases Page](https://github.com/aramrw/yomichan_audio_server/releases/tag/v0.3.0)**.
 - Download the audio files you want _(all recommended)_ from the **[Releases Page](https://github.com/aramrw/yomichan_audio_server/releases/tag/v0.3.0)**.
 - Extract and place the audio files folders inside **`yomichan_audio_server_v0.3.0/audio`**. It should look like this 👇
