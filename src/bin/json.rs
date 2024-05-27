@@ -29,3 +29,10 @@ struct EntryFile {
     pitch_number: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct IndexJson {
+    meta: Meta,
+    headwords: HashMap<String, Vec<String>>,
+    files: HashMap<String, EntryFile>,
+}
+
