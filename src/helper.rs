@@ -67,6 +67,25 @@ pub fn find_audio_file(entry: &database::Entry) -> Option<AudioSource> {
         }
     }
 
+    if entry.source == "daijisen" {
+        let daijisen_dir_path = "audio/daijisen_files";
+        let daijisen_dir = std::fs::read_dir(daijisen_dir_path).unwrap();
+
+        for file in daijisen_dir {
+            let file = file.unwrap();
+            if file.file_name() == *entry.file {
+                //println!("Found file: {:?}", file.file_name());
+                let audio_source = construct_audio_source(
+                    "daijisen",
+                    &entry.display,
+                    daijisen_dir_path,
+                    &entry.file,
+                );
+                return Some(audio_source);
+            }
+        }
+    }
+
     if entry.source == "jpod" {
         let jpod_dir_path = "audio/jpod_files/audio";
         let jpod_dir = std::fs::read_dir(jpod_dir_path).unwrap();
