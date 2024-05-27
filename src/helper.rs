@@ -68,7 +68,7 @@ pub fn find_audio_file(entry: &database::Entry) -> Option<AudioSource> {
     }
 
     if entry.source == "daijisen" {
-        let daijisen_dir_path = "audio/daijisen_files";
+        let daijisen_dir_path = "audio/daijisen_files/audio";
         let daijisen_dir = std::fs::read_dir(daijisen_dir_path).unwrap();
 
         for file in daijisen_dir {
