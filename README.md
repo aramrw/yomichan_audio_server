@@ -10,7 +10,7 @@
 - **`新明解８版`** (~**588** MB) - _**66,726** files_
 ### Add Audio Server to Yomichan/Yomitan
 - Paste `http://localhost:8080/?term={term}&reading={reading}` as an audio source just like in the gif below 👇
-<img  src="https://github.com/aramrw/yomichan_audio_server/assets/106574385/0f399e59-f3d4-4b6b-a54e-6daceb6bc582" width="720" />
+<img  src="https://github.com/aramrw/yomichan_audio_server/assets/106574385/0f399e59-f3d4-4b6b-a54e-6daceb6bc582" width="600" />
 
 ### Installation 
 - Download **`yomichan_audio_server_v0.3.0.rar`** from the **[Releases Page](https://github.com/aramrw/yomichan_audio_server/releases/tag/v0.3.0)**.
