@@ -14,3 +14,11 @@ pub struct Entry {
     pub file: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct Meta {
+    name: String,
+    year: u16,
+    version: u8,
+    media_dir: String,
+}
+
