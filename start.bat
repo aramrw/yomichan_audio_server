@@ -1,0 +1,2 @@
+yomichan_audio_server.exe
+pause
