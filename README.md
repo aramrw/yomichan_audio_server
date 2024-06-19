@@ -19,6 +19,7 @@ http://localhost:8080/?term={term}&reading={reading}
 - Download **`yomichan_audio_server_v0.3.0.rar`** from the **[Releases Page](https://github.com/aramrw/yomichan_audio_server/releases/tag/v0.3.0)**.
 - Download the audio files you want _(all recommended)_ from the **[Releases Page](https://github.com/aramrw/yomichan_audio_server/releases/tag/v0.3.0)**.
 - Extract and place the audio files folders inside **`yomichan_audio_server_v0.3.0/audio`**. It should look like this 👇
+- Run the .exe
 ```
 yomichan_audio_server_v0.3.0\
 ├── audio/
