@@ -33,13 +33,14 @@ yomichan_audio_server_v0.3.0\
 ├── yomichan_audio_server.exe
 ```
 ### Config Settings
-#### exit_minutes:
-- Default is 60 minutes _(adjusting it higher is recommended)_.
-#### debug: 
-- If you are having problems, set to true to unhide terminal and check error messages. Send bug reports in **[Issues](https://github.com/aramrw/yomichan_audio_server/issues)**.
 ```
 {
   "exit_minutes": 60,
   "debug": false
 }
 ```
+#### exit_minutes:
+- Default is 60 minutes _(adjusting it higher is recommended)_.
+#### debug: 
+- If you are having problems, set to true to unhide terminal and check error messages. Send bug reports in **[Issues](https://github.com/aramrw/yomichan_audio_server/issues)**.
+
