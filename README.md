@@ -19,6 +19,7 @@ http://localhost:8080/?term={term}&reading={reading}
 - Download **`yomichan_audio_server_v0.3.0.rar`** from the **[Releases Page](https://github.com/aramrw/yomichan_audio_server/releases/tag/v0.3.0)**.
 - Download the audio files you want _(all recommended)_ from the **[Releases Page](https://github.com/aramrw/yomichan_audio_server/releases/tag/v0.3.0)**.
 - Extract and place the audio files folders inside **`yomichan_audio_server_v0.3.0/audio`**. It should look like this 👇
+- Run the .exe
 ```
 yomichan_audio_server_v0.3.0\
 ├── audio/
@@ -33,13 +34,14 @@ yomichan_audio_server_v0.3.0\
 ├── yomichan_audio_server.exe
 ```
 ### Config Settings
-#### exit_minutes:
-- Default is 60 minutes _(adjusting it higher is recommended)_.
-#### debug: 
-- If you are having problems, set to true to unhide terminal and check error messages. Send bug reports in **[Issues](https://github.com/aramrw/yomichan_audio_server/issues)**.
 ```
 {
   "exit_minutes": 60,
   "debug": false
 }
 ```
+#### exit_minutes:
+- Default is 60 minutes _(adjusting it higher is recommended)_.
+#### debug: 
+- If you are having problems, set to true to unhide terminal and check error messages. Send bug reports in **[Issues](https://github.com/aramrw/yomichan_audio_server/issues)**.
+
