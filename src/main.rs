@@ -2,10 +2,14 @@ mod config;
 mod database;
 mod helper;
 
+use crate::database::Entry;
+use crate::helper::AudioSource;
+
 use actix_web::{
     http::header::ContentType, middleware, web, App, HttpRequest, HttpResponse, HttpServer,
     Responder,
 };
+use rayon::prelude::*;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -16,34 +20,16 @@ async fn index(req: HttpRequest) -> impl Responder {
     let term = query.get("term").unwrap_or(&missing);
     let reading = query.get("reading").unwrap_or(&missing);
 
-    let result = database::query_database(term, reading).await.unwrap();
-    let result_string = serde_json::to_string_pretty(&result).unwrap();
-    let result_json: serde_json::Value = serde_json::from_str(&result_string).unwrap();
-    let mut entries: Vec<database::Entry> = Vec::new();
-
-    match result_json {
-        serde_json::Value::Array(vec) => {
-            for obj in vec {
-                entries.push(helper::map_entry_object(&obj).unwrap());
-            }
-        }
-        _ => eprintln!("Not an object or array"),
-    }
-
+    let entries: Vec<Entry> = database::query_database(term, reading).await.unwrap();
     // contruct the list of audio sources
-    let mut audio_sources_list: Vec<helper::AudioSource> = Vec::new();
+    let mut audio_sources_list: Vec<Option<AudioSource>> = Vec::new();
 
     if !entries.is_empty() {
-        for entry in entries {
-            match helper::find_audio_file(&entry) {
-                Some(audio_source) => {
-                    audio_sources_list.push(audio_source);
-                }
-                None => {
-                    //println!("No audio source found");
-                }
-            }
-        }
+        let audo_files_res: Vec<Option<AudioSource>> = entries
+            .par_iter()
+            .map(helper::find_audio_file)
+            .collect();
+        audio_sources_list = audo_files_res;
     }
 
     // https://github.com/FooSoft/yomichan/blob/master/ext/data/schemas/custom-audio-list-schema.json
@@ -59,7 +45,6 @@ async fn index(req: HttpRequest) -> impl Responder {
         .content_type(ContentType::json())
         .json(resp)
 }
-
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -90,4 +75,3 @@ async fn main() -> std::io::Result<()> {
 
     server.await
 }
-
