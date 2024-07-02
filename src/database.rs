@@ -1,6 +1,7 @@
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sqlx::{sqlite::SqlitePool, Error, Row};
+//use std::time::Instant;
 
 #[derive(Default, Deserialize, Serialize, Debug)]
 pub struct Entry {
@@ -13,6 +14,7 @@ pub struct Entry {
 }
 
 pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, Error> {
+    //let instant = Instant::now();
     let sqlite_pool = SqlitePool::connect("./audio/entries.db").await?;
 
     let result = sqlx::query("SELECT * FROM entries WHERE expression = ? AND reading = ?")
@@ -84,5 +86,6 @@ pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, Err
         a_index.cmp(&b_index)
     });
 
+    //println!("Fetched Queries in {}ms", instant.elapsed().as_micros());
     Ok(query_entries)
 }
