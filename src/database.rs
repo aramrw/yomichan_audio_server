@@ -33,6 +33,10 @@ pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, Err
     let mut query_entries: Vec<Entry> = Vec::new();
 
     let dict_entries: Vec<Entry> = result
+        .par_iter()
+        .map(|row| {
+            let reading: Option<String> = row.try_get("reading").unwrap_or_default();
+            let speaker: Option<String> = row.try_get("speaker").unwrap_or_default();
 
             // file _might_ start with the folder name so cut it out
             let mut file: String = row.get("file");
@@ -73,7 +77,7 @@ pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, Err
     query_entries.extend(dict_entries);
     query_entries.extend(forvo_entries);
 
-    query_entries.sort_by(|a, b| {
+    query_entries.par_sort_unstable_by(|a, b| {
         let order = ["nhk16", "shinmeikai8", "daijisen", "forvo", "jpod"];
         let a_index = order.iter().position(|&x| x == a.source).unwrap();
         let b_index = order.iter().position(|&x| x == b.source).unwrap();
