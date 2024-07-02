@@ -1,3 +1,4 @@
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sqlx::{sqlite::SqlitePool, Error, Row};
 
@@ -19,6 +20,7 @@ pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, Err
         .bind(reading)
         .fetch_all(&sqlite_pool)
         .await?;
+        .fetch_all(&sqlite_pool);
 
     let forvo_result = sqlx::query(
         "SELECT * FROM entries WHERE expression = ? AND source = 'forvo' ORDER BY speaker DESC",
@@ -26,6 +28,11 @@ pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, Err
     .bind(term)
     .fetch_all(&sqlite_pool)
     .await?;
+    .fetch_all(&sqlite_pool);
+
+    let (result, forvo_result) = tokio::try_join!(result, forvo_result)?;
+
+    /* Handle Results */
 
     let mut query_entries: Vec<Entry> = Vec::new();
 
