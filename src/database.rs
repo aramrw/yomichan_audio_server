@@ -18,16 +18,12 @@ pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, Err
     let result = sqlx::query("SELECT * FROM entries WHERE expression = ? AND reading = ?")
         .bind(term)
         .bind(reading)
-        .fetch_all(&sqlite_pool)
-        .await?;
         .fetch_all(&sqlite_pool);
 
     let forvo_result = sqlx::query(
         "SELECT * FROM entries WHERE expression = ? AND source = 'forvo' ORDER BY speaker DESC",
     )
     .bind(term)
-    .fetch_all(&sqlite_pool)
-    .await?;
     .fetch_all(&sqlite_pool);
 
     let (result, forvo_result) = tokio::try_join!(result, forvo_result)?;
@@ -36,41 +32,46 @@ pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, Err
 
     let mut query_entries: Vec<Entry> = Vec::new();
 
-    result.iter().for_each(|row| {
-        let reading: Option<String> = row.try_get("reading").unwrap_or_default();
-        let speaker: Option<String> = row.try_get("speaker").unwrap_or_default();
+    let dict_entries: Vec<Entry> = result
 
-        // file might starts with the folder name so cut it out
-        let mut file: String = row.get("file");
-        file = file.rsplit_once('\\').unwrap().1.to_string();
+            // file _might_ start with the folder name so cut it out
+            let mut file: String = row.get("file");
+            file = file.rsplit_once('\\').unwrap().1.to_string();
 
-        query_entries.push(Entry {
-            expression: row.try_get("expression").unwrap_or_default(),
-            reading,
-            source: row.get("source"),
-            speaker,
-            display: row.get("display"),
-            file,
-        });
-    });
+            Entry {
+                expression: row.try_get("expression").unwrap_or_default(),
+                reading,
+                source: row.get("source"),
+                speaker,
+                display: row.get("display"),
+                file,
+            }
+        })
+        .collect();
 
-    forvo_result.iter().for_each(|row| {
-        let reading: Option<String> = row.try_get("reading").unwrap_or_default();
-        let speaker: Option<String> = row.try_get("speaker").unwrap_or_default();
+    let forvo_entries: Vec<Entry> = forvo_result
+        .par_iter()
+        .map(|row| {
+            let reading: Option<String> = row.try_get("reading").unwrap_or_default();
+            let speaker: Option<String> = row.try_get("speaker").unwrap_or_default();
 
-        // file starts with the folder name so cut it out
-        let mut file: String = row.get("file");
-        file = file.rsplit_once('\\').unwrap().1.to_string();
+            // file starts with the folder name so cut it out
+            let mut file: String = row.get("file");
+            file = file.rsplit_once('\\').unwrap().1.to_string();
 
-        query_entries.push(Entry {
-            expression: row.try_get("expression").unwrap_or_default(),
-            reading,
-            source: row.get("source"),
-            speaker,
-            display: row.get("display"),
-            file,
-        });
-    });
+            Entry {
+                expression: row.try_get("expression").unwrap_or_default(),
+                reading,
+                source: row.get("source"),
+                speaker,
+                display: row.get("display"),
+                file,
+            }
+        })
+        .collect();
+
+    query_entries.extend(dict_entries);
+    query_entries.extend(forvo_entries);
 
     query_entries.sort_by(|a, b| {
         let order = ["nhk16", "shinmeikai8", "daijisen", "forvo", "jpod"];
