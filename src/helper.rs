@@ -131,6 +131,31 @@ pub fn find_audio_file(entry: &database::Entry) -> Option<AudioSource> {
     None
 }
 
+fn search_dir_helper(
+    dict_name: &str,
+    entry_display: &str,
+    main_dir: &str,
+    file_name: &str,
+) -> Result<Option<AudioSource>, std::io::Error> {
+    let read_dir = std::fs::read_dir(main_dir)?;
+
+    let result: Option<AudioSource> = read_dir
+        .par_bridge()
+        .filter_map(|file| {
+            let file = file.unwrap();
+            if file.file_name() == file_name {
+                let audio_source =
+                    construct_audio_source(dict_name, entry_display, main_dir, file_name);
+                return Some(audio_source);
+            }
+
+            None
+        })
+        .find_any(|_| true);
+
+    Ok(result)
+}
+
 fn construct_audio_source(
     dict_name: &str,
     entry_display: &str,
