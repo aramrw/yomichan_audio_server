@@ -75,6 +75,12 @@ async fn main() -> std::io::Result<()> {
 
     server.await
 }
+
+enum Message {
+    Quit,
+    Debug,
+}
+
 fn get_args() -> Option<String> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 1 {
@@ -83,3 +89,41 @@ fn get_args() -> Option<String> {
     None
 }
 
+async fn init_tray() {
+    let mut tray = TrayItem::new(
+        "Yomichan Audio Server",
+        IconSource::Resource("tray-default"),
+    )
+    .unwrap();
+    //tray.add_label("Tray Label").unwrap();
+    let (tx, rx) = mpsc::sync_channel(1);
+
+    let debug_tx = tx.clone();
+    if let Some(arg) = get_args() {
+        if arg != "debug" {
+            #[cfg(target_os = "windows")]
+            tray.add_menu_item("Debug", move || {
+                debug_tx.send(Message::Debug).unwrap();
+            })
+            .unwrap();
+        }
+    }
+
+    let quit_tx = tx.clone();
+    tray.add_menu_item("Quit", move || {
+        quit_tx.send(Message::Quit).unwrap();
+    })
+    .unwrap();
+
+    loop {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        if let Ok(msg) = rx.recv() {
+            match msg {
+                Message::Quit => process::exit(0),
+                Message::Debug => {
+                    handle_debugger(false);
+                }
+            }
+        }
+    }
+}
