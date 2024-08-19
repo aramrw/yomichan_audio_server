@@ -75,3 +75,11 @@ async fn main() -> std::io::Result<()> {
 
     server.await
 }
+fn get_args() -> Option<String> {
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() > 1 {
+        return args.get(1).cloned();
+    }
+    None
+}
+
