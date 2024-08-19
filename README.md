@@ -33,6 +33,6 @@ yomichan_audio_server_v0.3.0\
 ├── yomichan_audio_server.exe
 ```
 #### debug: 
-- If you are having problems, click on the Debug menu item in the system tray, and check error messages.
+- If you are having problems, click on the `Debug` menu item in the system tray, and check error messages.
 - Send bug reports in **[Issues](https://github.com/aramrw/yomichan_audio_server/issues)**.
 
