@@ -9,9 +9,13 @@ use actix_web::{
     http::header::ContentType, middleware, web, App, HttpRequest, HttpResponse, HttpServer,
     Responder,
 };
+use config::handle_debugger;
 use rayon::prelude::*;
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::process;
+use std::sync::mpsc;
+use std::time::Duration;
+use tray_item::{IconSource, TrayItem};
 
 async fn index(req: HttpRequest) -> impl Responder {
     let missing = "MISSING".to_string();
@@ -19,16 +23,15 @@ async fn index(req: HttpRequest) -> impl Responder {
     let query = web::Query::<HashMap<String, String>>::from_query(req.query_string()).unwrap();
     let term = query.get("term").unwrap_or(&missing);
     let reading = query.get("reading").unwrap_or(&missing);
+    println!("term: {term} | reading: {reading}");
 
     let entries: Vec<Entry> = database::query_database(term, reading).await.unwrap();
     // contruct the list of audio sources
     let mut audio_sources_list: Vec<Option<AudioSource>> = Vec::new();
 
     if !entries.is_empty() {
-        let audo_files_res: Vec<Option<AudioSource>> = entries
-            .par_iter()
-            .map(helper::find_audio_file)
-            .collect();
+        let audo_files_res: Vec<Option<AudioSource>> =
+            entries.par_iter().map(helper::find_audio_file).collect();
         audio_sources_list = audo_files_res;
     }
 
@@ -48,11 +51,19 @@ async fn index(req: HttpRequest) -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let config = config::create_config();
-    config::handle_debugger(&config);
     config::kill_previous_instance();
 
-    let timer = Instant::now();
+    match get_args() {
+        Some(arg) => {
+            // Starts the server again except with the "debug" arg.
+            println!("{arg} INSTANCE");
+        }
+        // If this is the first run (i.e., no "hidden" or "debug" arguments), start a hidden instance.
+        None => {
+            println!("FIRST RUN INSTANCE");
+            handle_debugger(true)
+        }
+    }
 
     let server = HttpServer::new(|| {
         App::new()
@@ -64,13 +75,7 @@ async fn main() -> std::io::Result<()> {
     .run();
 
     tokio::spawn(async move {
-        loop {
-            tokio::time::sleep(Duration::from_secs(60)).await; // Check every minute
-            if timer.elapsed().as_secs() / 60 >= config.exit_minutes {
-                println!("Exiting after {} minutes", config.exit_minutes);
-                std::process::exit(0);
-            }
-        }
+        init_tray().await;
     });
 
     server.await
