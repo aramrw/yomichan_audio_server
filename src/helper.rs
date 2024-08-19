@@ -1,7 +1,9 @@
 use crate::database;
 //use rayon::prelude::*;
+use bimap::BiHashMap;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use std::sync::LazyLock;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct AudioSource {
@@ -121,7 +123,7 @@ fn construct_audio_source(
             url: format!("http://localhost:8080/{}/{}", main_dir, file_name),
         };
     }
-    
+
     // dict files
     let display = format!("{} {}", dict_name, entry_display);
     AudioSource {
