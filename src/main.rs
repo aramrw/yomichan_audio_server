@@ -27,13 +27,17 @@ async fn index(req: HttpRequest) -> impl Responder {
 
     let entries: Vec<Entry> = database::query_database(term, reading).await.unwrap();
     // contruct the list of audio sources
-    let mut audio_sources_list: Vec<Option<AudioSource>> = Vec::new();
+    let mut audio_sources_list: Vec<AudioSource> = Vec::new();
 
     if !entries.is_empty() {
-        let audo_files_res: Vec<Option<AudioSource>> =
-            entries.par_iter().map(helper::find_audio_file).collect();
-        audio_sources_list = audo_files_res;
+        let audio_files_res: Vec<AudioSource> = entries
+            .par_iter()
+            .filter_map(helper::find_audio_file) // Directly filter out `None` values
+            .collect();
+        audio_sources_list = audio_files_res;
     }
+
+    //println!("{:#?}", audio_sources_list);
 
     // https://github.com/FooSoft/yomichan/blob/master/ext/data/schemas/custom-audio-list-schema.json
     // construct the JSON response yomitan is expecting
