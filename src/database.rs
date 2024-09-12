@@ -1,7 +1,11 @@
+use std::process::Output;
+
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sqlx::{prelude::FromRow, sqlite::SqlitePool, Error};
 use tokio::join;
+
+use crate::helper::KANA_MAP;
 
 #[derive(Default, Deserialize, Serialize, Debug, FromRow)]
 pub struct Entry {
@@ -22,11 +26,24 @@ pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, Err
             .bind(reading)
             .fetch_all(&sqlite_pool);
 
-    let fetch_forvo_result = sqlx::query_as::<_, Entry>(
-        "SELECT * FROM entries WHERE expression = ? AND source = 'forvo' ORDER BY speaker DESC",
-    )
-    .bind(term)
-    .fetch_all(&sqlite_pool);
+    let fetch_forvo_result;
+
+    if KANA_MAP
+        .get_by_right(reading.chars().next().unwrap().to_string().as_str())
+        .is_some()
+    {
+        fetch_forvo_result = sqlx::query_as::<_, Entry>(
+            "SELECT * FROM entries WHERE expression = ? AND source = 'forvo' ORDER BY speaker DESC",
+        )
+        .bind(term)
+        .fetch_all(&sqlite_pool);
+    } else {
+        fetch_forvo_result = sqlx::query_as::<_, Entry>(
+            "SELECT * FROM entries WHERE expression = ? AND source = 'forvo_zh' ORDER BY speaker DESC",
+        )
+        .bind(term)
+        .fetch_all(&sqlite_pool);
+    }
 
     // Await them concurrently
     let (result, forvo_result) = join!(fetch_result, fetch_forvo_result);
@@ -50,7 +67,14 @@ pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, Err
         .map(|mut ent| {
             // file _might_ start with the folder name so cut it out
             let file: String = ent.file;
-            ent.file = file.rsplit_once('\\').unwrap().1.to_string();
+            // Use rsplit_once properly
+            let file = file
+                .rsplit_once('\\')
+                .map(|(_, suffix)| suffix.to_string()) // Extract the suffix and convert to String
+                .unwrap_or(file); // If rsplit_once returns None, use the original file
+
+            ent.file = file;
+            //println!("{:?}", ent);
             ent
         })
         .collect();
@@ -60,8 +84,18 @@ pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, Err
 
     query_entries.par_sort_unstable_by(|a, b| {
         let order = ["daijisen", "nhk16", "shinmeikai8", "forvo", "jpod"];
-        let a_index = order.iter().position(|&x| x == a.source).unwrap();
-        let b_index = order.iter().position(|&x| x == b.source).unwrap();
+
+        // Find the index or use a default value if not found
+        let a_index = order
+            .iter()
+            .position(|&x| x == a.source)
+            .unwrap_or(order.len());
+        let b_index = order
+            .iter()
+            .position(|&x| x == b.source)
+            .unwrap_or(order.len());
+
+        // Compare the indices
         a_index.cmp(&b_index)
     });
 
