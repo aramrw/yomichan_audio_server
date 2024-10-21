@@ -3,6 +3,10 @@ name = "yomichan_audio_server"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "json"
+path = "src/lib.rs"
+
 [dependencies]
 actix-web = { version = "4" }
 actix-files = { version = "0.6.5" }

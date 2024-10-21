@@ -61,37 +61,77 @@ pub fn find_audio_file(entry: &database::Entry) -> Option<AudioSource> {
                 &entry.file,
             )
             .unwrap();
+
+            //println!("returning {:?}", audio_source);
+
             return Some(audio_source);
         }
+    }
+
+    if entry.source == "forvo_zh" {
+        let audio_source =
+            search_dir_helper_forvo(entry.speaker.as_ref().unwrap(), "", "audio/zh", &entry.file)
+                .unwrap();
+
+        println!("returning {:?}", audio_source);
+        return audio_source;
     }
 
     None
 }
 
-// fn search_dir_helper(
-//     dict_name: &str,
-//     entry_display: &str,
-//     main_dir: &str,
-//     file_name: &str,
-// ) -> Result<Option<AudioSource>, std::io::Error> {
-//     let read_dir = std::fs::read_dir(main_dir)?;
-//
-//     let result: Option<AudioSource> = read_dir
-//         .par_bridge()
-//         .filter_map(|file| {
-//             let file = file.unwrap();
-//             if file.file_name() == file_name {
-//                 let audio_source =
-//                     construct_audio_source(dict_name, entry_display, main_dir, file_name);
-//                 return Some(audio_source);
-//             }
-//
-//             None
-//         })
-//         .find_any(|_| true);
-//
-//     Ok(result)
-// }
+fn search_dir_helper_forvo(
+    speaker: &str,
+    entry_display: &str,
+    main_dir: &str,
+    file_name: &str,
+) -> Result<Option<AudioSource>, std::io::Error> {
+    // Iterate over each folder in the main directory
+    for folder in std::fs::read_dir(main_dir)? {
+        let folder = folder?;
+        let folder_name = folder.file_name();
+        let folder_name_str = folder_name.to_string_lossy(); // Convert to &str for comparison
+        let folder_path = folder.path();
+
+        // Skip folders that do not match the speaker name
+        if folder_name_str != speaker {
+            continue; // Continue to the next folder if names do not match
+        }
+
+        // Search for the file within the matched folder
+        let result = std::fs::read_dir(&folder_path)?.find_map(|entry| {
+            match entry {
+                Ok(entry) => {
+                    let entry_file_name = entry.file_name();
+                    if entry_file_name == file_name {
+                        // Construct and return the audio source if file matches
+                        Some(construct_audio_source(
+                            speaker,
+                            entry_display,
+                            &format!("{}/{}", main_dir, speaker),
+                            file_name,
+                        ))
+                    } else {
+                        None
+                    }
+                }
+                Err(e) => {
+                    // Log any errors reading directory entries
+                    eprintln!("Error reading directory entry: {}", e);
+                    None
+                }
+            }
+        });
+
+        // Return the result if found
+        if result.is_some() {
+            return Ok(result);
+        }
+    }
+
+    // Return None if no file was found
+    Ok(None)
+}
 
 fn search_dir_helper(
     dict_name: &str,
