@@ -17,8 +17,9 @@ tokio = { version = "1", features = ["full"] }
 sysinfo = { version = "0.30.10" }
 rayon = "1.10.0"
 bimap = { version = "0.6.3", features = ["std"] }
-# tray-icon = "0.15.1"
 tray-item = "0.10.0"
+thiserror = "1.0.64"
+# tray-icon = "0.15.1"
 
 [build-dependencies]
 embed-resource = "2.4.3"
