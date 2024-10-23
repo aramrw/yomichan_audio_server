@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
-use std::path::Path;
+use std::{env::current_dir, path::Path};
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Config {
@@ -31,22 +32,41 @@ fn get_config() -> Config {
     config
 }
 
-#[cfg(target_os = "windows")]
 pub fn handle_debugger(hidden: bool) {
     if hidden {
         // Launch hidden instance
+        #[cfg(target_os = "windows")]
         std::process::Command::new("yomichan_audio_server.exe")
             .arg("hidden")
             .creation_flags(0x00000008) // CREATE_NO_WINDOW
             .spawn()
             .unwrap();
+
+        #[cfg(target_os = "macos")]
+        {
+            let binary_path = current_dir().unwrap().join("yomichan_audio_server");
+            std::process::Command::new(binary_path)
+                .arg("hidden")
+                .spawn()
+                .unwrap();
+        }
     }
     if !hidden {
         // Launch visible instance
+        #[cfg(target_os = "windows")]
         std::process::Command::new("yomichan_audio_server.exe")
             .arg("debug")
             .spawn()
             .unwrap();
+
+        #[cfg(target_os = "macos")]
+        {
+            let binary_path = current_dir().unwrap().join("yomichan_audio_server");
+            std::process::Command::new(binary_path)
+                .arg("hidden")
+                .spawn()
+                .unwrap();
+        }
     }
 }
 
