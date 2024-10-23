@@ -14,39 +14,26 @@ pub struct AudioSource {
 pub fn find_audio_file(entry: &database::Entry) -> Option<AudioSource> {
     if entry.source == "shinmeikai8" {
         let shinmeikai_dir_path = "audio/shinmeikai8_files/media";
-
-        let audio_source =
-            search_dir_helper("smk", &entry.display, shinmeikai_dir_path, &entry.file).unwrap();
-
-        return Some(audio_source);
+        return search_dir_helper("smk", &entry.display, shinmeikai_dir_path, &entry.file).ok();
     }
 
     if entry.source == "nhk16" {
         let nhk16_dir_path = "audio/nhk16_files/media";
-
-        let audio_source =
-            search_dir_helper("nhk", &entry.display, nhk16_dir_path, &entry.file).unwrap();
-        return Some(audio_source);
+        return search_dir_helper("nhk", &entry.display, nhk16_dir_path, &entry.file).ok();
     }
 
     if entry.source == "daijisen" {
         let daijisen_dir_path = "audio/daijisen_files/audio";
-
-        let audio_source =
-            search_dir_helper("daijisen", &entry.display, daijisen_dir_path, &entry.file).unwrap();
-        return Some(audio_source);
+        return search_dir_helper("daijisen", &entry.display, daijisen_dir_path, &entry.file).ok();
     }
 
     if entry.source == "jpod" {
         let jpod_dir_path = "audio/jpod_files/audio";
-
-        let audio_source = search_dir_helper("jpod", "", jpod_dir_path, &entry.file).unwrap();
-        return Some(audio_source);
+        return search_dir_helper("jpod", "", jpod_dir_path, &entry.file).ok();
     }
 
     if entry.source == "forvo" {
         let forvo_speakers = ["strawberrybrown", "kaoring", "poyotan", "akitomo", "skent"];
-
         for speaker in forvo_speakers.iter() {
             if speaker != entry.speaker.as_ref().unwrap() {
                 continue;
@@ -54,17 +41,14 @@ pub fn find_audio_file(entry: &database::Entry) -> Option<AudioSource> {
 
             let format_dir = format!("audio/forvo_files/{}", speaker);
 
-            let audio_source = search_dir_helper(
+            search_dir_helper(
                 entry.speaker.as_ref().unwrap(),
                 "",
                 &format_dir,
                 &entry.file,
             )
-            .unwrap();
-
+            .ok();
             //println!("returning {:?}", audio_source);
-
-            return Some(audio_source);
         }
     }
 
@@ -140,6 +124,7 @@ fn search_dir_helper(
     file_name: &str,
 ) -> Result<AudioSource, std::io::Error> {
     let file_path = Path::new(main_dir).join(file_name);
+    println!("searching path {:#?}", file_path);
     std::fs::File::open(file_path)?;
 
     Ok(construct_audio_source(
