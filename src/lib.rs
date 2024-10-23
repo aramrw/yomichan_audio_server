@@ -3,8 +3,8 @@ mod test;
 use serde::{Deserialize, Serialize};
 use serde_json::Deserializer;
 use std::collections::hash_map::HashMap;
-use std::fs::{self, read_dir, File};
-use std::io::{BufReader, Error, ErrorKind, Write};
+use std::fs::{read_dir, File};
+use std::io::{BufReader, Write};
 use std::path::Path;
 
 #[derive(Default, Deserialize, Serialize, Debug)]
@@ -112,7 +112,7 @@ pub fn create_index_json(
             if let Some((file_name, _)) = full_file_name.rsplit_once('.') {
                 files
                     .entry(file_name.to_string())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(GenericEntryFile {
                         speaker: Some(speaker.clone()),
                         file: full_file_name,
