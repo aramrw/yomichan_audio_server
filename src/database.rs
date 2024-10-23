@@ -1,11 +1,13 @@
-use std::process::Output;
-
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use sqlx::{prelude::FromRow, sqlite::SqlitePool, Error};
+use sqlx::{prelude::FromRow, sqlite::SqlitePool};
+use std::{
+    env::current_dir,
+    path::{Path, PathBuf},
+};
 use tokio::join;
 
-use crate::helper::KANA_MAP;
+use crate::{error::DbError, helper::KANA_MAP};
 
 #[derive(Default, Deserialize, Serialize, Debug, FromRow)]
 pub struct Entry {
@@ -17,8 +19,17 @@ pub struct Entry {
     pub file: String,
 }
 
-pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, Error> {
-    let sqlite_pool = SqlitePool::connect("./audio/entries.db").await?;
+pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, DbError> {
+    match Path::new("./audio").exists() {
+        true => {
+            if !Path::new("./audio/entries.db").exists() {
+                return Err(DbError::MissingEntriesDB);
+            }
+        }
+        false => return Err(DbError::MissingAudioFolder(current_dir().unwrap())),
+    }
+
+    let sqlite_pool = SqlitePool::connect("audio/entries.db").await?;
 
     let fetch_result =
         sqlx::query_as::<_, Entry>("SELECT * FROM entries WHERE expression = ? AND reading = ?")
@@ -56,8 +67,11 @@ pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, Err
         .into_iter()
         .map(|mut ent| {
             // file _might_ start with the folder name so cut it out
-            let file: String = ent.file;
-            ent.file = file.rsplit_once('\\').unwrap().1.to_string();
+            let file_path = Path::new(&ent.file);
+            if let Some(file_name) = file_path.file_name() {
+                println!("{:#?}", file_name);
+                ent.file = file_name.to_string_lossy().to_string();
+            }
             ent
         })
         .collect();
@@ -66,15 +80,11 @@ pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, Err
         .into_iter()
         .map(|mut ent| {
             // file _might_ start with the folder name so cut it out
-            let file: String = ent.file;
-            // Use rsplit_once properly
-            let file = file
-                .rsplit_once('\\')
-                .map(|(_, suffix)| suffix.to_string()) // Extract the suffix and convert to String
-                .unwrap_or(file); // If rsplit_once returns None, use the original file
+            let file_path = Path::new(&ent.file);
+            if let Some(file_name) = file_path.file_name() {
+                ent.file = file_name.to_string_lossy().to_string();
+            }
 
-            ent.file = file;
-            //println!("{:?}", ent);
             ent
         })
         .collect();
