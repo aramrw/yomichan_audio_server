@@ -1,8 +1,9 @@
 mod config;
 mod database;
+mod error;
 mod helper;
 
-use crate::database::Entry;
+//use crate::database::Entry;
 use crate::helper::AudioSource;
 
 use actix_web::{
@@ -10,11 +11,13 @@ use actix_web::{
     Responder,
 };
 use config::handle_debugger;
+use database::Entry;
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::process;
 use std::sync::mpsc;
 use std::time::Duration;
+use tokio::io::stderr;
 use tray_item::{IconSource, TrayItem};
 
 async fn index(req: HttpRequest) -> impl Responder {
@@ -25,19 +28,24 @@ async fn index(req: HttpRequest) -> impl Responder {
     let reading = query.get("reading").unwrap_or(&missing);
     println!("term: {term} | reading: {reading}");
 
-    let entries: Vec<Entry> = database::query_database(term, reading).await.unwrap();
+    let entries: Vec<Entry> = match database::query_database(term, reading).await {
+        Ok(res) => res,
+        Err(e) => {
+            eprintln!("Error Querying the Database: {e}");
+            Vec::new()
+        }
+    };
     // contruct the list of audio sources
     let mut audio_sources_list: Vec<AudioSource> = Vec::new();
 
     if !entries.is_empty() {
+        print!("\n{:#?}\n", entries);
         let audio_files_res: Vec<AudioSource> = entries
             .par_iter()
             .filter_map(helper::find_audio_file) // Directly filter out `None` values
             .collect();
         audio_sources_list = audio_files_res;
     }
-
-    //println!("{:#?}", audio_sources_list);
 
     // https://github.com/FooSoft/yomichan/blob/master/ext/data/schemas/custom-audio-list-schema.json
     // construct the JSON response yomitan is expecting
@@ -78,6 +86,9 @@ async fn main() -> std::io::Result<()> {
     .bind("localhost:8080")?
     .run();
 
+    // MacOS does not allow running applications in threads other than main,
+    // meaning that it is not possible to listen for events in a new thread
+    #[cfg(target_os = "windows")]
     tokio::spawn(async move {
         init_tray().await;
     });
