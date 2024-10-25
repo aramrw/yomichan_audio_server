@@ -12,12 +12,12 @@ use actix_web::{
 };
 use config::handle_debugger;
 use database::Entry;
+use helper::set_working_dir;
 use rayon::prelude::*;
-use std::collections::HashMap;
 use std::process;
 use std::sync::mpsc;
 use std::time::Duration;
-use tokio::io::stderr;
+use std::{collections::HashMap, env::current_dir};
 use tray_item::{IconSource, TrayItem};
 
 async fn index(req: HttpRequest) -> impl Responder {
@@ -64,16 +64,22 @@ async fn index(req: HttpRequest) -> impl Responder {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     config::kill_previous_instance();
-
+    #[cfg(target_os = "macos")]
     match get_args() {
         Some(arg) => {
-            // Starts the server again except with the "debug" arg.
+            let arg = arg.to_lowercase();
             println!("{arg} INSTANCE");
+            if arg.contains("debug") {
+                // do nothing if its debug
+            } else if arg.contains("hidden") {
+                set_working_dir().unwrap();
+            }
         }
         // If this is the first run (i.e., no "hidden" or "debug" arguments), start a hidden instance.
         None => {
             println!("FIRST RUN INSTANCE");
-            handle_debugger(true)
+            handle_debugger(false);
+            println!("{:#?}", current_dir().unwrap());
         }
     }
 
