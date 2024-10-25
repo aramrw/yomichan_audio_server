@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
-use std::{env::current_dir, path::Path};
+use std::{
+    env::{current_dir, current_exe},
+    path::Path,
+};
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Config {
@@ -45,7 +48,8 @@ pub fn handle_debugger(hidden: bool) {
         #[cfg(target_os = "macos")]
         {
             let binary_path = current_dir().unwrap().join("yomichan_audio_server");
-            std::process::Command::new(binary_path)
+            std::process::Command::new("setsid")
+                .arg(binary_path)
                 .arg("hidden")
                 .spawn()
                 .unwrap();
@@ -61,11 +65,12 @@ pub fn handle_debugger(hidden: bool) {
 
         #[cfg(target_os = "macos")]
         {
-            let binary_path = current_dir().unwrap().join("yomichan_audio_server");
-            std::process::Command::new(binary_path)
-                .arg("hidden")
-                .spawn()
-                .unwrap();
+            if let Ok(current_exe_path) = current_exe() {
+                std::process::Command::new(current_exe_path)
+                    .arg("debug")
+                    .spawn()
+                    .unwrap();
+            }
         }
     }
 }
