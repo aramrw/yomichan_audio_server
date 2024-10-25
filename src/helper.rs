@@ -2,6 +2,7 @@ use crate::database;
 //use rayon::prelude::*;
 use bimap::BiHashMap;
 use serde::{Deserialize, Serialize};
+use std::env::set_current_dir;
 use std::path::Path;
 use std::sync::LazyLock;
 
@@ -155,6 +156,14 @@ fn construct_audio_source(
         name: display,
         url: format!("http://localhost:8080/{}/{}", main_dir, file_name),
     }
+}
+
+pub fn set_working_dir() -> Result<(), std::io::Error> {
+    let exe_path = std::env::current_exe()?;
+    if let Some(parent_dir) = exe_path.parent() {
+        set_current_dir(parent_dir)?;
+    }
+    Ok(())
 }
 
 pub fn convert_kana(term: &str) -> String {
