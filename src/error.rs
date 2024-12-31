@@ -10,7 +10,6 @@ pub enum DbError {
         #[from]
         source: SqlxError,
     },
-
     #[error("audio folder is missing from the current directory: {0}")]
     MissingAudioFolder(PathBuf),
     #[error("entries.db is missing from the audio folder")]
