@@ -59,8 +59,6 @@ pub async fn update_entries() {
     create_test_table(&pool).await;
 
     let mut transaction = pool.begin().await.unwrap();
-    let mut count = 0;
-
     for json in stream {
         let json = json.unwrap();
         for entry in &json.files {
@@ -80,7 +78,6 @@ pub async fn update_entries() {
                 insert_entry(&mut transaction, entry).await;
             }
         }
-        print!("\rAdded {} out of {}          ", count, &json.files.len());
     }
 
     transaction.commit().await.unwrap();
@@ -211,8 +208,8 @@ async fn insert_entry(transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>, ent
     }
 }
 
-fn format_pitch_display(pattern: &str, number: &str) -> String {
-    let mut pattern = pattern.replace('↓', "＼");
-    pattern = pattern.replace('○', "");
-    format!("{} [{}]", pattern.trim(), number)
-}
+// fn format_pitch_display(pattern: &str, number: &str) -> String {
+//     let mut pattern = pattern.replace('↓', "＼");
+//     pattern = pattern.replace('○', "");
+//     format!("{} [{}]", pattern.trim(), number)
+// }

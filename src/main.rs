@@ -17,7 +17,6 @@ use std::collections::HashMap;
 use std::process;
 use std::sync::mpsc;
 use std::time::Duration;
-use tokio::io::stderr;
 use tray_item::{IconSource, TrayItem};
 
 async fn index(req: HttpRequest) -> impl Responder {
