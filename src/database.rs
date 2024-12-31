@@ -1,10 +1,7 @@
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sqlx::{prelude::FromRow, sqlite::SqlitePool};
-use std::{
-    env::current_dir,
-    path::{Path, PathBuf},
-};
+use std::{env::current_dir, path::Path};
 use tokio::join;
 
 use crate::{error::DbError, helper::KANA_MAP};
@@ -37,24 +34,22 @@ pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, DbE
             .bind(reading)
             .fetch_all(&sqlite_pool);
 
-    let fetch_forvo_result;
-
-    if KANA_MAP
+    let fetch_forvo_result = if KANA_MAP
         .get_by_right(reading.chars().next().unwrap().to_string().as_str())
         .is_some()
     {
-        fetch_forvo_result = sqlx::query_as::<_, Entry>(
+        sqlx::query_as::<_, Entry>(
             "SELECT * FROM entries WHERE expression = ? AND source = 'forvo' ORDER BY speaker DESC",
         )
         .bind(term)
-        .fetch_all(&sqlite_pool);
+        .fetch_all(&sqlite_pool)
     } else {
-        fetch_forvo_result = sqlx::query_as::<_, Entry>(
+        sqlx::query_as::<_, Entry>(
             "SELECT * FROM entries WHERE expression = ? AND source = 'forvo_zh' ORDER BY speaker DESC",
         )
         .bind(term)
-        .fetch_all(&sqlite_pool);
-    }
+        .fetch_all(&sqlite_pool)
+    };
 
     // Await them concurrently
     let (result, forvo_result) = join!(fetch_result, fetch_forvo_result);
