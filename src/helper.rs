@@ -157,21 +157,21 @@ fn construct_audio_source(
     }
 }
 
-pub fn convert_kana(term: &str) -> String {
-    let chars = term.chars();
-
-    chars
-        .map(|c| {
-            let mut tmp = [0u8];
-            let str = c.encode_utf8(&mut tmp);
-            match KANA_MAP.get_by_left(str) {
-                Some(hg) => *hg,
-                None => *KANA_MAP.get_by_right(str).unwrap(),
-            }
-        })
-        .collect::<Vec<&str>>()
-        .concat()
-}
+// pub fn convert_kana(term: &str) -> String {
+//     let chars = term.chars();
+//
+//     chars
+//         .map(|c| {
+//             let mut tmp = [0u8];
+//             let str = c.encode_utf8(&mut tmp);
+//             match KANA_MAP.get_by_left(str) {
+//                 Some(hg) => *hg,
+//                 None => *KANA_MAP.get_by_right(str).unwrap(),
+//             }
+//         })
+//         .collect::<Vec<&str>>()
+//         .concat()
+// }
 
 #[rustfmt::skip]
 pub static KANA_MAP: LazyLock<BiHashMap<&'static str, &'static str>> = LazyLock::new(|| {
