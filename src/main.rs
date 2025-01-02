@@ -1,6 +1,6 @@
+mod cli;
 mod config;
 mod database;
-mod error;
 mod helper;
 
 //use crate::database::Entry;
@@ -10,71 +10,74 @@ use actix_web::{
     http::header::ContentType, middleware, web, App, HttpRequest, HttpResponse, HttpServer,
     Responder,
 };
-use config::handle_debugger;
-use database::Entry;
-use rayon::prelude::*;
-use std::collections::HashMap;
+use clap::Parser;
+use cli::{Cli, CliDebugLevel};
+use color_eyre::eyre::eyre;
+use config::spawn_headless;
+use database::{DbError, Entry};
+use sqlx::SqlitePool;
+use std::path::Path;
 use std::process;
-use std::sync::mpsc;
+use std::sync::{mpsc, LazyLock};
 use std::time::Duration;
+use std::{collections::HashMap, path::PathBuf};
+use tracing::debug;
+use tracing_subscriber::EnvFilter;
 use tray_item::{IconSource, TrayItem};
 
-async fn index(req: HttpRequest) -> impl Responder {
-    let missing = "MISSING".to_string();
-    // Access query parameters
-    let query = web::Query::<HashMap<String, String>>::from_query(req.query_string()).unwrap();
-    let term = query.get("term").unwrap_or(&missing);
-    let reading = query.get("reading").unwrap_or(&missing);
-    println!("term: {term} | reading: {reading}");
-
-    let entries: Vec<Entry> = match database::query_database(term, reading).await {
-        Ok(res) => res,
-        Err(e) => {
-            eprintln!("Error Querying the Database: {e}");
-            Vec::new()
-        }
-    };
-    // contruct the list of audio sources
-    let mut audio_sources_list: Vec<AudioSource> = Vec::new();
-
-    if !entries.is_empty() {
-        print!("\n{:#?}\n", entries);
-        let audio_files_res: Vec<AudioSource> = entries
-            .par_iter()
-            .filter_map(helper::find_audio_file) // Directly filter out `None` values
-            .collect();
-        audio_sources_list = audio_files_res;
-    }
-
-    // https://github.com/FooSoft/yomichan/blob/master/ext/data/schemas/custom-audio-list-schema.json
-    // construct the JSON response yomitan is expecting
-
-    let resp = serde_json::json!({
-        "type": "audioSourceList",
-        "audioSources": audio_sources_list
-    });
-
-    // Return the JSON response
-    HttpResponse::Ok()
-        .content_type(ContentType::json())
-        .json(resp)
+pub(crate) struct ProgramInfo {
+    pub pkg_name: String,
+    pub version: String,
+    pub current_exe: PathBuf,
+    pub cli: Cli,
 }
+
+pub(crate) static PROGRAM_INFO: LazyLock<ProgramInfo> = LazyLock::new(|| {
+    let version = env!("CARGO_PKG_VERSION").to_string();
+    let current_exe = std::env::current_exe().unwrap();
+    let cli = Cli::parse();
+    let pkg_name = env!("CARGO_PKG_NAME").to_string();
+
+    ProgramInfo {
+        pkg_name,
+        version,
+        current_exe,
+        cli,
+    }
+});
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    config::kill_previous_instance();
+    let pkg_name = &PROGRAM_INFO.pkg_name;
 
-    match get_args() {
-        Some(arg) => {
-            // Starts the server again except with the "debug" arg.
-            println!("{arg} INSTANCE");
+    println!("--debug-level: {:#?}", &PROGRAM_INFO.cli.debug_level);
+    let print_debug_info_fn = || {
+        debug!(port = ?PROGRAM_INFO.cli.port.inner, "\n   raw port:");
+        debug!(name = %PROGRAM_INFO.pkg_name, "\n   pkg_info");
+    };
+    let init_fulltrace_subscriber = || {
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::new(format!("{}=trace", pkg_name,)))
+            .init();
+    };
+
+    match &PROGRAM_INFO.cli.debug_level {
+        CliDebugLevel::Headless => {
+            println!("YOMICHAN_AUDIO_SERVER\n   --HEADLESS");
+            spawn_headless();
+            process::exit(0);
         }
-        // If this is the first run (i.e., no "hidden" or "debug" arguments), start a hidden instance.
-        None => {
-            println!("FIRST RUN INSTANCE");
-            handle_debugger(true)
+        CliDebugLevel::Dev => {
+            print_debug_info_fn();
+            init_fulltrace_subscriber();
+        }
+        CliDebugLevel::Full => {
+            std::env::set_var("RUST_BACKTRACE", "1");
+            print_debug_info_fn();
+            init_fulltrace_subscriber();
         }
     }
+    config::kill_previous_instance();
 
     let server = HttpServer::new(|| {
         App::new()
@@ -82,11 +85,13 @@ async fn main() -> std::io::Result<()> {
             .service(actix_files::Files::new("/audio", "audio"))
             .route("/", web::get().to(index))
     })
-    .bind("localhost:8080")?
+    .bind(&*PROGRAM_INFO.cli.port.inner)?
     .run();
 
-    // MacOS does not allow running applications in threads other than main,
-    // meaning that it is not possible to listen for events in a new thread
+    print_greeting();
+
+    // macOS doesnt allow running programs in threads other than main,
+    // -> it is not possible to listen for events in a new thread
     #[cfg(target_os = "windows")]
     tokio::spawn(async move {
         init_tray().await;
@@ -95,17 +100,78 @@ async fn main() -> std::io::Result<()> {
     server.await
 }
 
+async fn index(req: HttpRequest) -> impl Responder {
+    let missing = "MISSING".to_string();
+
+    // access query parameters
+    let query =
+        match actix_web::web::Query::<HashMap<String, String>>::from_query(req.query_string()) {
+            Ok(q) => q,
+            Err(e) => return HttpResponse::from_error(e),
+        };
+    let instant = std::time::Instant::now();
+    let term = query.get("term").unwrap_or(&missing);
+    let reading = query.get("reading").unwrap_or(&missing);
+
+    match Path::new("./audio").exists() {
+        true => {
+            if !Path::new("./audio/entries.db").exists() {
+                let report = eyre!("{}", DbError::MissingEntriesDB);
+                eprintln!("{:?}", report);
+            }
+        }
+        false => eprintln!(
+            "{:?}",
+            DbError::MissingAudioFolder(PROGRAM_INFO.current_exe.clone())
+        ),
+    }
+
+    // should use a real error for more context;
+    let pool = SqlitePool::connect("./audio/entries.db").await.unwrap();
+    let entries: Vec<Entry> = match database::query_database(term, reading, &pool).await {
+        Ok(res) => res,
+        Err(e) => {
+            eprintln!("{:?}", e);
+            Vec::new()
+        }
+    };
+
+    let audio_source_list = AudioSource::create_list(&entries);
+
+    match PROGRAM_INFO.cli.debug_level {
+        CliDebugLevel::Dev | CliDebugLevel::Full => {
+            println!();
+            let span = tracing::span!(tracing::Level::INFO, 
+                "serving\n  ", term=%term, reading=%reading);
+            let _enter = span.enter();
+
+            tracing::debug!(
+                "( {:.3}ms ) .. c={}",
+                instant.elapsed().as_millis(),
+                audio_source_list.len()
+            );
+
+            AudioSource::print_list(&audio_source_list);
+        }
+        CliDebugLevel::Headless => {}
+    }
+
+    // github.com/FooSoft/yomichan/blob/master/ext/data/schemas/custom-audio-list-schema.json
+    // JSON response yomitan is expecting
+
+    let resp = serde_json::json!({
+        "type": "audioSourceList",
+        "audioSources": audio_source_list
+    });
+
+    HttpResponse::Ok()
+        .content_type(ContentType::json())
+        .json(resp)
+}
+
 enum Message {
     Quit,
     Debug,
-}
-
-fn get_args() -> Option<String> {
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() > 1 {
-        return args.get(1).cloned();
-    }
-    None
 }
 
 async fn init_tray() {
@@ -118,14 +184,16 @@ async fn init_tray() {
     let (tx, rx) = mpsc::sync_channel(1);
 
     let debug_tx = tx.clone();
-    if let Some(arg) = get_args() {
-        if arg != "debug" {
+    #[allow(clippy::single_match)]
+    match PROGRAM_INFO.cli.debug_level {
+        CliDebugLevel::Headless => {
             #[cfg(target_os = "windows")]
             tray.add_menu_item("Debug", move || {
                 debug_tx.send(Message::Debug).unwrap();
             })
             .unwrap();
         }
+        _ => {}
     }
 
     let quit_tx = tx.clone();
@@ -140,9 +208,24 @@ async fn init_tray() {
             match msg {
                 Message::Quit => process::exit(0),
                 Message::Debug => {
-                    handle_debugger(false);
+                    spawn_headless();
                 }
             }
         }
     }
+}
+
+pub fn print_greeting() {
+    #[allow(unused_variables)]
+    let ProgramInfo {
+        pkg_name,
+        version,
+        current_exe,
+        cli,
+    } = &*PROGRAM_INFO;
+    let port = &cli.port.inner;
+    // program version
+    println!("Yomichan Audio Server (v{version}) --");
+    // port
+    println!("   Port: {port}");
 }
