@@ -1,10 +1,13 @@
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use sqlx::Error as SqlxError;
 use sqlx::{prelude::FromRow, sqlite::SqlitePool};
-use std::{env::current_dir, path::Path};
+use std::path::Path;
+use std::path::PathBuf;
+use thiserror::Error;
 use tokio::join;
 
-use crate::{error::DbError, helper::KANA_MAP};
+use crate::helper::KANA_MAP;
 
 #[derive(Default, Deserialize, Serialize, Debug, FromRow)]
 pub struct Entry {
@@ -16,76 +19,85 @@ pub struct Entry {
     pub file: String,
 }
 
-pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, DbError> {
-    match Path::new("./audio").exists() {
-        true => {
-            if !Path::new("./audio/entries.db").exists() {
-                return Err(DbError::MissingEntriesDB);
-            }
+impl Entry {
+    pub fn strip_folder_name_prefix(&mut self) {
+        // file _might_ start with the folder name so cut it out
+        let file_path = Path::new(&self.file);
+        if let Some(file_name) = file_path.file_name() {
+            self.file = file_name.to_string_lossy().to_string();
         }
-        false => return Err(DbError::MissingAudioFolder(current_dir().unwrap())),
     }
+}
 
-    let sqlite_pool = SqlitePool::connect("audio/entries.db").await?;
+// Define your custom error type
+#[derive(Debug, Error)]
+pub enum DbError {
+    #[error("SQLx Error Occurred: {source}")]
+    SqlxError {
+        #[from]
+        source: SqlxError,
+    },
+    #[error("audio folder is missing from the current directory: {0}")]
+    MissingAudioFolder(PathBuf),
+    #[error("entries.db is missing from the audio folder")]
+    MissingEntriesDB,
+}
 
-    let fetch_result =
-        sqlx::query_as::<_, Entry>("SELECT * FROM entries WHERE expression = ? AND reading = ?")
-            .bind(term)
-            .bind(reading)
-            .fetch_all(&sqlite_pool);
+async fn query_forvo_base(
+    source: &str,
+    term: &str,
+    pool: &SqlitePool,
+) -> Result<Vec<Entry>, sqlx::Error> {
+    sqlx::query_as::<_, Entry>(
+        "SELECT * FROM entries 
+            WHERE expression = ? AND source = ? 
+            ORDER BY speaker DESC",
+    )
+    .bind(term)
+    .bind(source)
+    .fetch_all(pool)
+    .await
+}
 
-    let fetch_forvo_result = if KANA_MAP
-        .get_by_right(reading.chars().next().unwrap().to_string().as_str())
-        .is_some()
-    {
-        sqlx::query_as::<_, Entry>(
-            "SELECT * FROM entries WHERE expression = ? AND source = 'forvo' ORDER BY speaker DESC",
-        )
-        .bind(term)
-        .fetch_all(&sqlite_pool)
-    } else {
-        sqlx::query_as::<_, Entry>(
-            "SELECT * FROM entries WHERE expression = ? AND source = 'forvo_zh' ORDER BY speaker DESC",
-        )
-        .bind(term)
-        .fetch_all(&sqlite_pool)
-    };
+pub async fn query_database(
+    term: &str,
+    reading: &str,
+    pool: &SqlitePool,
+) -> color_eyre::Result<Vec<Entry>> {
+    let fetch_dict_result = sqlx::query_as::<_, Entry>(
+        "SELECT * FROM entries 
+        WHERE expression = ? AND reading = ?",
+    )
+    .bind(term)
+    .bind(reading)
+    .fetch_all(pool);
 
-    // Await them concurrently
-    let (result, forvo_result) = join!(fetch_result, fetch_forvo_result);
-    let result = result?;
-    let forvo_result = forvo_result?;
+    // decides whether to serve chinese audio or japanese audio.
+    let first_char = reading.chars().next().unwrap();
+    let mut tmp = [0u8; 4];
+    let first = first_char.encode_utf8(&mut tmp);
+    let fetch_forvo_result =
+        if KANA_MAP.get_by_right(first).is_some() || KANA_MAP.get_by_left(first).is_some() {
+            query_forvo_base("forvo", term, pool)
+        } else {
+            query_forvo_base("forvo_zh", term, pool)
+        };
+
+    // await them concurrently
+    let (result, forvo_result) = join!(fetch_dict_result, fetch_forvo_result);
+    let mut dict_entries = result?;
+    let mut forvo_entries = forvo_result?;
+
+    let (de_len, fe_len) = (dict_entries.len(), forvo_entries.len());
 
     /* Handle Results */
-    let mut query_entries: Vec<Entry> = Vec::new();
-    let dict_entries: Vec<Entry> = result
-        .into_iter()
-        .map(|mut ent| {
-            // file _might_ start with the folder name so cut it out
-            let file_path = Path::new(&ent.file);
-            if let Some(file_name) = file_path.file_name() {
-                println!("{:#?}", file_name);
-                ent.file = file_name.to_string_lossy().to_string();
-            }
-            ent
-        })
-        .collect();
+    dict_entries
+        .par_iter_mut()
+        .chain(forvo_entries.par_iter_mut())
+        .for_each(|e| e.strip_folder_name_prefix());
 
-    let forvo_entries: Vec<Entry> = forvo_result
-        .into_iter()
-        .map(|mut ent| {
-            // file _might_ start with the folder name so cut it out
-            let file_path = Path::new(&ent.file);
-            if let Some(file_name) = file_path.file_name() {
-                ent.file = file_name.to_string_lossy().to_string();
-            }
-
-            ent
-        })
-        .collect();
-
-    query_entries.extend(dict_entries);
-    query_entries.extend(forvo_entries);
+    let mut query_entries: Vec<Entry> = Vec::with_capacity(de_len + fe_len);
+    query_entries.extend(dict_entries.into_iter().chain(forvo_entries.into_iter()));
 
     query_entries.par_sort_unstable_by(|a, b| {
         let order = ["daijisen", "nhk16", "shinmeikai8", "forvo", "jpod"];
@@ -105,4 +117,29 @@ pub async fn query_database(term: &str, reading: &str) -> Result<Vec<Entry>, DbE
     });
 
     Ok(query_entries)
+}
+
+#[cfg(test)]
+mod db_tests {
+    use sqlx::SqlitePool;
+
+    use super::query_database;
+    use crate::helper::AudioSource;
+    use std::time::Instant;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_query() {
+        //tracing_subscriber::fmt::init();
+        let instant = Instant::now();
+        let term = "本";
+        let reading = "ほん";
+        let pool = SqlitePool::connect("audio/entries.db").await.unwrap();
+        let entries = query_database(term, reading, &pool).await.unwrap();
+        assert!(!entries.is_empty());
+
+        let audio_source_list = AudioSource::create_list(&entries);
+        AudioSource::print_list(&audio_source_list);
+
+        tracing::info!("\nelapsed: {:.3}ms\n", instant.elapsed().as_millis());
+    }
 }
