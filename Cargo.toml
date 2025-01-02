@@ -1,6 +1,6 @@
 [package]
 name = "yomichan_audio_server"
-version = "0.1.0"
+version = "0.1.2"
 edition = "2021"
 
 [lib]
@@ -11,7 +11,7 @@ path = "src/lib.rs"
 actix-web = { version = "4" }
 actix-files = { version = "0.6.5" }
 serde = { version = "1.0", features = ["derive"] }
-serde_json = { version = "1.0" }
+serde_json = "1.0"
 sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite"] }
 tokio = { version = "1", features = ["full"] }
 sysinfo = { version = "0.30.10" }
@@ -19,7 +19,11 @@ rayon = "1.10.0"
 bimap = { version = "0.6.3", features = ["std"] }
 tray-item = "0.10.0"
 thiserror = "1.0.64"
+clap = { version = "4.5.23", features = ["derive"] }
+tracing = "0.1.41"
+tracing-subscriber = {version = "0.3.19", features = ["env-filter"]}
+color-eyre = "0.6.3"
 # tray-icon = "0.15.1"
 
 [build-dependencies]
-embed-resource = "2.4.3"
+embed-resource = "3.0.1"
