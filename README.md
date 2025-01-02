@@ -24,7 +24,7 @@ http://localhost:8080/?term={term}&reading={reading}
 yomichan_audio_server_v0.3.0\
 ├── audio/
 │   ├── daijisen_files\
-│   ├── forvo_files\
+│   ├── jp_forvo_files\
 │   ├── jpod_files\
 │   ├── nhk16_files\
 │   ├── shinmeikai8＿files\
