@@ -11,7 +11,7 @@ use actix_web::{
     Responder,
 };
 use clap::Parser;
-use cli::{Cli, CliDebugLevel};
+use cli::{Cli, CliLog};
 use color_eyre::eyre::eyre;
 use config::spawn_headless;
 use database::{DbError, Entry};
@@ -50,7 +50,7 @@ pub(crate) static PROGRAM_INFO: LazyLock<ProgramInfo> = LazyLock::new(|| {
 async fn main() -> std::io::Result<()> {
     let pkg_name = &PROGRAM_INFO.pkg_name;
 
-    println!("--debug-level: {:#?}", &PROGRAM_INFO.cli.debug_level);
+    println!("--debug-level: {:#?}", &PROGRAM_INFO.cli.log);
     let print_debug_info_fn = || {
         debug!(port = ?PROGRAM_INFO.cli.port.inner, "\n   raw port:");
         debug!(name = %PROGRAM_INFO.pkg_name, "\n   pkg_info");
@@ -61,17 +61,18 @@ async fn main() -> std::io::Result<()> {
             .init();
     };
 
-    match &PROGRAM_INFO.cli.debug_level {
-        CliDebugLevel::Headless => {
+    match &PROGRAM_INFO.cli.log {
+        CliLog::Headless => {
             println!("YOMICHAN_AUDIO_SERVER\n   --HEADLESS");
             spawn_headless();
             process::exit(0);
         }
-        CliDebugLevel::Dev => {
+        CliLog::HeadlessInstance => {}
+        CliLog::Dev => {
             print_debug_info_fn();
             init_fulltrace_subscriber();
         }
-        CliDebugLevel::Full => {
+        CliLog::Full => {
             std::env::set_var("RUST_BACKTRACE", "1");
             print_debug_info_fn();
             init_fulltrace_subscriber();
@@ -120,10 +121,13 @@ async fn index(req: HttpRequest) -> impl Responder {
                 eprintln!("{:?}", report);
             }
         }
-        false => eprintln!(
-            "{:?}",
-            DbError::MissingAudioFolder(PROGRAM_INFO.current_exe.clone())
-        ),
+        false => {
+            let report = eyre!(
+                "{}",
+                DbError::MissingAudioFolder(PROGRAM_INFO.current_exe.clone())
+            );
+            eprintln!("{:?}", report);
+        }
     }
 
     // should use a real error for more context;
@@ -138,8 +142,8 @@ async fn index(req: HttpRequest) -> impl Responder {
 
     let audio_source_list = AudioSource::create_list(&entries);
 
-    match PROGRAM_INFO.cli.debug_level {
-        CliDebugLevel::Dev | CliDebugLevel::Full => {
+    match PROGRAM_INFO.cli.log {
+        CliLog::Dev | CliLog::Full => {
             println!();
             let span = tracing::span!(tracing::Level::INFO, 
                 "serving\n  ", term=%term, reading=%reading);
@@ -150,10 +154,9 @@ async fn index(req: HttpRequest) -> impl Responder {
                 instant.elapsed().as_millis(),
                 audio_source_list.len()
             );
-
             AudioSource::print_list(&audio_source_list);
         }
-        CliDebugLevel::Headless => {}
+        _ => {}
     }
 
     // github.com/FooSoft/yomichan/blob/master/ext/data/schemas/custom-audio-list-schema.json
@@ -185,8 +188,8 @@ async fn init_tray() {
 
     let debug_tx = tx.clone();
     #[allow(clippy::single_match)]
-    match PROGRAM_INFO.cli.debug_level {
-        CliDebugLevel::Headless => {
+    match PROGRAM_INFO.cli.log {
+        CliLog::Headless => {
             #[cfg(target_os = "windows")]
             tray.add_menu_item("Debug", move || {
                 debug_tx.send(Message::Debug).unwrap();

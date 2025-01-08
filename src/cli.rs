@@ -11,15 +11,17 @@ use tracing::info;
 pub struct Cli {
     /// Debug info level.
     #[arg(long, value_enum, default_value = "headless")]
-    pub debug_level: CliDebugLevel,
+    pub log: CliLog,
     #[arg(long, default_value_t = PortType::default())]
     pub port: PortType,
 }
 
 #[derive(ClapValueEnum, Clone, Debug, Default, PartialEq)]
-pub enum CliDebugLevel {
+pub enum CliLog {
     #[default]
     Headless,
+    // used for checking if a headless instance needs to be spawned or it is the current headless instance
+    HeadlessInstance,
     Dev,
     Full,
 }

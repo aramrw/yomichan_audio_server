@@ -54,19 +54,19 @@ pub fn find_audio_file(entry: &database::Entry) -> Result<AudioSource, AudioFile
     match entry.source.as_str() {
         "shinmeikai8" => {
             let shinmeikai_dir_path = "audio/shinmeikai8_files/media";
-            search_dir_helper("smk", &entry.display, shinmeikai_dir_path, &entry.file)
+            construct_audio_source("smk", shinmeikai_dir_path, entry)
         }
         "nhk16" => {
             let nhk16_dir_path = "audio/nhk16_files/media";
-            search_dir_helper("nhk", &entry.display, nhk16_dir_path, &entry.file)
+            construct_audio_source("nhk", nhk16_dir_path, entry)
         }
         "daijisen" => {
             let daijisen_dir_path = "audio/daijisen_files/media";
-            search_dir_helper("daijisen", &entry.display, daijisen_dir_path, &entry.file)
+            construct_audio_source("daijisen", daijisen_dir_path, entry)
         }
         "jpod" => {
             let jpod_dir_path = "audio/jpod_files/media";
-            search_dir_helper("jpod", "", jpod_dir_path, &entry.file)
+            construct_audio_source("jpod", jpod_dir_path, entry)
         }
         // should be renamed to forvo_jp
         "forvo" => {
@@ -87,19 +87,9 @@ pub fn find_audio_file(entry: &database::Entry) -> Result<AudioSource, AudioFile
 
             let format_dir = format!("audio/jp_forvo_files/{}", current_speaker);
 
-            search_dir_helper(
-                entry.speaker.as_ref().unwrap(),
-                "",
-                &format_dir,
-                &entry.file,
-            )
+            construct_audio_source(entry.speaker.as_ref().unwrap(), &format_dir, entry)
         }
-        "forvo_zh" => search_dir_helper_forvo(
-            entry.speaker.as_deref().unwrap(),
-            "",
-            "audio/zh",
-            &entry.file,
-        ),
+        "forvo_zh" => search_dir_helper_forvo("audio/zh", entry),
 
         _ => Err(AudioFileError::UnkownSource {
             src: entry.source.clone(),
@@ -107,12 +97,16 @@ pub fn find_audio_file(entry: &database::Entry) -> Result<AudioSource, AudioFile
     }
 }
 
-fn search_dir_helper_forvo(
-    speaker: &str,
-    entry_display: &str,
-    main_dir: &str,
-    file_name: &str,
-) -> Result<AudioSource, AudioFileError> {
+fn search_dir_helper_forvo(main_dir: &str, entry: &Entry) -> Result<AudioSource, AudioFileError> {
+    let Entry {
+        expression,
+        file,
+        source,
+        reading,
+        speaker,
+        display,
+    } = entry;
+    let speaker = speaker.as_deref().unwrap();
     // Iterate over each folder in the main directory
     for folder in std::fs::read_dir(main_dir)? {
         let folder = folder?;
@@ -126,71 +120,66 @@ fn search_dir_helper_forvo(
         }
 
         // Search for the file within the matched folder
-        let final_audio = std::fs::read_dir(&folder_path)?.find_map(|entry| {
-            let entry = entry.ok()?;
-            let entry_file_name = entry.file_name();
-            if entry_file_name == file_name {
+        let final_audio = std::fs::read_dir(&folder_path)?.find_map(|item| {
+            let item = item.ok()?;
+            let item_file_name = item.file_name();
+            if *item_file_name == **file {
                 // Construct and return the audio source if file matches
-                let audio_src = construct_audio_source(
-                    speaker,
-                    entry_display,
-                    &format!("{}/{}", main_dir, speaker),
-                    file_name,
-                );
+                let audio_src =
+                    construct_audio_source(speaker, &format!("{}/{}", main_dir, speaker), entry);
                 return Some(audio_src);
             }
             None
         });
 
         if let Some(final_audio) = final_audio {
+            let final_audio = final_audio?;
             return Ok(final_audio);
         }
     }
 
     Err(AudioFileError::MissingAudioFile {
-        file_name: file_name.to_string(),
+        file_name: file.to_string(),
     })
 }
 
-fn search_dir_helper(
-    dict_name: &str,
-    entry_display: &str,
+fn construct_audio_source(
+    custom_source: &str,
     main_dir: &str,
-    file_name: &str,
+    entry: &Entry,
 ) -> Result<AudioSource, AudioFileError> {
-    let file_path = Path::new(main_dir).join(file_name);
+    let Entry {
+        expression,
+        reading,
+        source,
+        speaker,
+        display,
+        file,
+    } = entry;
+
     //println!("searching path {:#?}", file_path);
+    let file_path = Path::new(main_dir).join(&file);
     std::fs::File::open(file_path)?;
 
-    Ok(construct_audio_source(
-        dict_name,
-        entry_display,
-        main_dir,
-        file_name,
-    ))
-}
-
-fn construct_audio_source(
-    dict_name: &str,
-    entry_display: &str,
-    main_dir: &str,
-    file_name: &str,
-) -> AudioSource {
     // if is forvo file
-    if entry_display.is_empty() {
-        return AudioSource {
-            name: dict_name.to_string(),
-            url: format!("http://localhost:8080/{}/{}", main_dir, file_name),
+    if display.is_empty() {
+        let res = AudioSource {
+            name: source.to_string(),
+            url: format!("http://localhost:8080/{}/{}", main_dir, file),
         };
+        return Ok(res);
     }
 
     // dict files
-    let display = format!("{} {}", dict_name, entry_display);
-    AudioSource {
+    let display = format!("{} {}", source, display);
+    let res = AudioSource {
         name: display,
-        url: format!("http://localhost:8080/{}/{}", main_dir, file_name),
-    }
+        url: format!("http://localhost:8080/{}/{}", main_dir, file),
+    };
+
+    Ok(res)
 }
+
 #[rustfmt::skip]
 pub static KANA_MAP: LazyLock<BiHashMap<&'static str, &'static str>> = LazyLock::new(|| {
     BiHashMap::from_iter([

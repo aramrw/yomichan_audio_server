@@ -16,6 +16,7 @@ pub fn spawn_headless() {
     #[allow(clippy::zombie_processes)]
     std::process::Command::new("yomichan_audio_server.exe")
         .creation_flags(0x00000008) // CREATE_NO_WINDOW
+        .args(["--log", "headless-instance"])
         .spawn()
         .unwrap();
 
