@@ -7,6 +7,17 @@ use std::fs::{read_dir, File};
 use std::io::{BufReader, Write};
 use std::path::Path;
 
+#[macro_use]
+mod macros {
+    #[macro_export]
+    macro_rules! eprint_pretty {
+        ($e:expr) => {
+            let r = eyre!("{}", $e);
+            eprintln!("{:?}", r);
+        };
+    }
+}
+
 #[derive(Default, Deserialize, Serialize, Debug)]
 pub struct Entry {
     pub expression: String,
