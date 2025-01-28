@@ -3,8 +3,7 @@ mod config;
 mod database;
 mod helper;
 
-//use crate::database::Entry;
-use crate::helper::AudioSource;
+use crate::helper::AudioResult;
 
 use actix_web::{
     http::header::ContentType, middleware, web, App, HttpRequest, HttpResponse, HttpServer,
@@ -14,7 +13,8 @@ use clap::Parser;
 use cli::{Cli, CliLog};
 use color_eyre::eyre::eyre;
 use config::spawn_headless;
-use database::{DbError, Entry};
+use database::{DatabaseEntry, DbError};
+use json::eprint_pretty;
 use sqlx::SqlitePool;
 use std::path::Path;
 use std::process;
@@ -91,8 +91,6 @@ async fn main() -> std::io::Result<()> {
 
     print_greeting();
 
-    // macOS doesnt allow running programs in threads other than main,
-    // -> it is not possible to listen for events in a new thread
     #[cfg(target_os = "windows")]
     tokio::spawn(async move {
         init_tray().await;
@@ -102,37 +100,33 @@ async fn main() -> std::io::Result<()> {
 }
 
 async fn index(req: HttpRequest) -> impl Responder {
-    let missing = "MISSING".to_string();
-
     // access query parameters
     let query =
         match actix_web::web::Query::<HashMap<String, String>>::from_query(req.query_string()) {
             Ok(q) => q,
             Err(e) => return HttpResponse::from_error(e),
         };
-    let instant = std::time::Instant::now();
-    let term = query.get("term").unwrap_or(&missing);
-    let reading = query.get("reading").unwrap_or(&missing);
+    let start = std::time::Instant::now();
+    let (Some(term), Some(reading)) = (query.get("term"), query.get("reading")) else {
+        return HttpResponse::BadRequest().body("Missing query parameters: 'term' and 'reading'.");
+    };
 
     match Path::new("./audio").exists() {
         true => {
             if !Path::new("./audio/entries.db").exists() {
-                let report = eyre!("{}", DbError::MissingEntriesDB);
-                eprintln!("{:?}", report);
+                let e = DbError::MissingEntriesDB;
+                eprint_pretty!(e);
             }
         }
         false => {
-            let report = eyre!(
-                "{}",
-                DbError::MissingAudioFolder(PROGRAM_INFO.current_exe.clone())
-            );
-            eprintln!("{:?}", report);
+            let e = DbError::MissingAudioFolder(PROGRAM_INFO.current_exe.clone());
+            eprint_pretty!(e);
         }
     }
 
     // should use a real error for more context;
     let pool = SqlitePool::connect("./audio/entries.db").await.unwrap();
-    let entries: Vec<Entry> = match database::query_database(term, reading, &pool).await {
+    let entries: Vec<DatabaseEntry> = match database::query_database(term, reading, &pool).await {
         Ok(res) => res,
         Err(e) => {
             eprintln!("{:?}", e);
@@ -140,21 +134,21 @@ async fn index(req: HttpRequest) -> impl Responder {
         }
     };
 
-    let audio_source_list = AudioSource::create_list(&entries);
+    let audio_source_list = AudioResult::create_list(&entries);
 
     match PROGRAM_INFO.cli.log {
         CliLog::Dev | CliLog::Full => {
             println!();
-            let span = tracing::span!(tracing::Level::INFO, 
+            let span = tracing::span!(tracing::Level::INFO,
                 "serving\n  ", term=%term, reading=%reading);
             let _enter = span.enter();
 
             tracing::debug!(
                 "( {:.3}ms ) .. c={}",
-                instant.elapsed().as_millis(),
+                start.elapsed().as_millis(),
                 audio_source_list.len()
             );
-            AudioSource::print_list(&audio_source_list);
+            AudioResult::print_list(&audio_source_list);
         }
         _ => {}
     }
