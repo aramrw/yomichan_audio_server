@@ -23,6 +23,8 @@ clap = { version = "4.5.23", features = ["derive"] }
 tracing = "0.1.41"
 tracing-subscriber = {version = "0.3.19", features = ["env-filter"]}
 color-eyre = "0.6.3"
+pretty_assertions = "1.4.1"
+indexmap = { version = "2.7.1", features = ["serde"] }
 # tray-icon = "0.15.1"
 
 [build-dependencies]
