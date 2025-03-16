@@ -16,11 +16,13 @@ use config::spawn_headless;
 use database::{DatabaseEntry, DbError};
 use json::eprint_pretty;
 use sqlx::SqlitePool;
+use std::io::Write;
 use std::path::Path;
 use std::process;
-use std::sync::{mpsc, LazyLock};
+use std::sync::mpsc;
 use std::time::Duration;
 use std::{collections::HashMap, path::PathBuf};
+use tokio::sync::OnceCell;
 use tracing::debug;
 use tracing_subscriber::EnvFilter;
 use tray_item::{IconSource, TrayItem};
@@ -30,30 +32,45 @@ pub(crate) struct ProgramInfo {
     pub version: String,
     pub current_exe: PathBuf,
     pub cli: Cli,
+    pub db: SqlitePool,
 }
 
-pub(crate) static PROGRAM_INFO: LazyLock<ProgramInfo> = LazyLock::new(|| {
-    let version = env!("CARGO_PKG_VERSION").to_string();
-    let current_exe = std::env::current_exe().unwrap();
-    let cli = Cli::parse();
-    let pkg_name = env!("CARGO_PKG_NAME").to_string();
-
-    ProgramInfo {
-        pkg_name,
-        version,
-        current_exe,
-        cli,
-    }
-});
+pub(crate) static PROGRAM_INFO: OnceCell<ProgramInfo> = OnceCell::const_new();
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let pkg_name = &PROGRAM_INFO.pkg_name;
+    println!("Initializing Server Info..");
+    PROGRAM_INFO
+        .get_or_init(async || {
+            let buf = include_bytes!("../entries.db");
+            let mut db_file = std::fs::OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .open("entries.db")
+                .unwrap();
+            db_file.write_all(buf).unwrap();
+            let version = env!("CARGO_PKG_VERSION").to_string();
+            let current_exe = std::env::current_exe().unwrap();
+            let cli = Cli::parse();
+            let pkg_name = env!("CARGO_PKG_NAME").to_string();
+            let db = SqlitePool::connect("entries.db").await.unwrap();
 
-    println!("--debug-level: {:#?}", &PROGRAM_INFO.cli.log);
+            ProgramInfo {
+                pkg_name,
+                version,
+                current_exe,
+                cli,
+                db,
+            }
+        })
+        .await;
+    let pi = PROGRAM_INFO.get().unwrap();
+    let pkg_name = &pi.pkg_name;
+
+    println!("--debug-level: {:#?}", pi.cli.log);
     let print_debug_info_fn = || {
-        debug!(port = ?PROGRAM_INFO.cli.port.inner, "\n   raw port:");
-        debug!(name = %PROGRAM_INFO.pkg_name, "\n   pkg_info");
+        debug!(port = ?pi.cli.port.inner, "\n   raw port:");
+        debug!(name = %pkg_name, "\n   pkg_info");
     };
     let init_fulltrace_subscriber = || {
         tracing_subscriber::fmt()
@@ -61,7 +78,7 @@ async fn main() -> std::io::Result<()> {
             .init();
     };
 
-    match &PROGRAM_INFO.cli.log {
+    match pi.cli.log {
         CliLog::Headless => {
             println!("YOMICHAN_AUDIO_SERVER\n   --HEADLESS");
             spawn_headless();
@@ -86,7 +103,7 @@ async fn main() -> std::io::Result<()> {
             .service(actix_files::Files::new("/audio", "audio"))
             .route("/", web::get().to(index))
     })
-    .bind(&*PROGRAM_INFO.cli.port.inner)?
+    .bind(&pi.cli.port.inner)?
     .run();
 
     print_greeting();
@@ -100,6 +117,7 @@ async fn main() -> std::io::Result<()> {
 }
 
 async fn index(req: HttpRequest) -> impl Responder {
+    let pi = &PROGRAM_INFO.get().unwrap();
     // access query parameters
     let query =
         match actix_web::web::Query::<HashMap<String, String>>::from_query(req.query_string()) {
@@ -111,32 +129,24 @@ async fn index(req: HttpRequest) -> impl Responder {
         return HttpResponse::BadRequest().body("Missing query parameters: 'term' and 'reading'.");
     };
 
-    match Path::new("./audio").exists() {
-        true => {
-            if !Path::new("./audio/entries.db").exists() {
-                let e = DbError::MissingEntriesDB;
-                eprint_pretty!(e);
-            }
-        }
-        false => {
-            let e = DbError::MissingAudioFolder(PROGRAM_INFO.current_exe.clone());
-            eprint_pretty!(e);
-        }
+    if !Path::new("./audio").exists() {
+        let e = DbError::MissingAudioFolder(pi.current_exe.clone());
+        println!();
+        eprint_pretty!(e);
+        std::process::exit(1);
     }
 
-    // should use a real error for more context;
-    let pool = SqlitePool::connect("./audio/entries.db").await.unwrap();
-    let entries: Vec<DatabaseEntry> = match database::query_database(term, reading, &pool).await {
+    let entries: Vec<DatabaseEntry> = match database::query_database(term, reading).await {
         Ok(res) => res,
         Err(e) => {
-            eprintln!("{:?}", e);
-            Vec::new()
+            eprint_pretty!(e);
+            return HttpResponse::from_error(std::io::Error::new(std::io::ErrorKind::Other, e));
         }
     };
 
     let audio_source_list = AudioResult::create_list(&entries);
 
-    match PROGRAM_INFO.cli.log {
+    match pi.cli.log {
         CliLog::Dev | CliLog::Full => {
             println!();
             let span = tracing::span!(tracing::Level::INFO,
@@ -172,6 +182,7 @@ enum Message {
 }
 
 async fn init_tray() {
+    let pi = PROGRAM_INFO.get().unwrap();
     let mut tray = TrayItem::new(
         "Yomichan Audio Server",
         IconSource::Resource("tray-default"),
@@ -182,7 +193,7 @@ async fn init_tray() {
 
     let debug_tx = tx.clone();
     #[allow(clippy::single_match)]
-    match PROGRAM_INFO.cli.log {
+    match pi.cli.log {
         CliLog::Headless => {
             #[cfg(target_os = "windows")]
             tray.add_menu_item("Debug", move || {
@@ -219,7 +230,8 @@ pub fn print_greeting() {
         version,
         current_exe,
         cli,
-    } = &*PROGRAM_INFO;
+        ..
+    } = PROGRAM_INFO.get().unwrap();
     let port = &cli.port.inner;
     // program version
     println!("Yomichan Audio Server (v{version}) --");

@@ -2,7 +2,7 @@ use crate::database::DatabaseEntry;
 use bimap::BiHashMap;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, sync::LazyLock};
+use std::sync::LazyLock;
 
 #[derive(thiserror::Error)]
 pub enum AudioFileError {
@@ -38,12 +38,10 @@ impl AudioResult {
                 .par_iter()
                 .filter_map(|e| Some(e.to_audio_result().unwrap()))
                 .collect();
-
             audio_sources_list = audio_files_res;
         }
         audio_sources_list
     }
-
     pub fn print_list(list: &[AudioResult]) {
         for entry in list {
             println!("    ▼ {}\n        {}", entry.name, entry.url);
@@ -51,8 +49,9 @@ impl AudioResult {
     }
 }
 
-pub static AUDIO_FILE_STEMS: LazyLock<HashSet<&'static str>> =
-    LazyLock::new(|| HashSet::from_iter(["mp4", "mp3", "wav", "ogg", "flac"]));
+#[allow(dead_code)]
+pub static AUDIO_FILE_STEMS: LazyLock<std::collections::HashSet<&'static str>> =
+    LazyLock::new(|| std::collections::HashSet::from_iter(["mp4", "mp3", "wav", "ogg", "flac"]));
 
 #[rustfmt::skip]
 pub static KANA_MAP: LazyLock<BiHashMap<&'static str, &'static str>> = LazyLock::new(|| {

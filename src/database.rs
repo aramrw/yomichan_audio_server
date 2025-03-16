@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use thiserror::Error;
 use tokio::join;
 
-use crate::helper::{AudioFileError, AudioResult, AUDIO_FILE_STEMS, KANA_MAP};
+use crate::helper::{AudioFileError, AudioResult, KANA_MAP};
 use crate::PROGRAM_INFO;
 
 #[derive(Default, Deserialize, Serialize, Debug, FromRow, Clone)]
@@ -37,8 +37,7 @@ impl DatabaseEntry {
     /// without needing to loop over every file.
     pub fn find_audio_file(&self, dir: impl AsRef<Path>) -> Result<PathBuf, AudioFileError> {
         let format = |p: &Path| p.join(&self.file);
-        for item in read_dir(&dir).unwrap() {
-            let item = item.unwrap();
+        for item in read_dir(&dir).unwrap().flatten() {
             let path = item.path();
             let p_name = path.file_name().unwrap().to_str().unwrap();
             if path.is_dir() {
@@ -61,6 +60,7 @@ impl DatabaseEntry {
 
     // Construct the audio source based on the file path
     pub fn to_audio_result(&self) -> Result<AudioResult, AudioFileError> {
+        let pi = PROGRAM_INFO.get().unwrap();
         let entry = &self;
         let DatabaseEntry {
             source,
@@ -83,11 +83,7 @@ impl DatabaseEntry {
         if display.is_empty() {
             let res = AudioResult {
                 name: source.to_string(),
-                url: format!(
-                    "http://{}/{}",
-                    PROGRAM_INFO.cli.port.inner,
-                    &file_path.display(),
-                ),
+                url: format!("http://{}/{}", pi.cli.port.inner, &file_path.display(),),
             };
             return Ok(res);
         }
@@ -180,11 +176,9 @@ async fn query_forvo_base(
     .await
 }
 
-pub async fn query_database(
-    term: &str,
-    reading: &str,
-    pool: &SqlitePool,
-) -> color_eyre::Result<Vec<DatabaseEntry>> {
+pub async fn query_database(term: &str, reading: &str) -> color_eyre::Result<Vec<DatabaseEntry>> {
+    let pi = PROGRAM_INFO.get().unwrap();
+    let pool = &pi.db;
     let fetch_dict_result = sqlx::query_as::<_, DatabaseEntry>(
         "SELECT * FROM entries
         WHERE expression = ? AND reading = ?",
@@ -240,43 +234,42 @@ pub async fn query_database(
     Ok(query_entries)
 }
 
-fn index_files(dir: impl AsRef<Path>) -> Vec<&'static str> {
-    let mut dirs = Vec::new();
-    let mut files = Vec::new();
-    for entry in read_dir(dir).unwrap().into_iter() {
-        let Ok(entry) = entry else {
-            continue;
-        };
-        let path = entry.path();
-
-        if path.is_file() {
-            if let Some(stem) = path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .and_then(|stem| AUDIO_FILE_STEMS.get(stem).copied())
-            {
-                files.push(stem);
-            }
-        } else if path.is_dir() {
-            dirs.push(path);
-        }
-    }
-    let d_files = dirs
-        .into_par_iter()
-        .flat_map(|dir| index_files(dir))
-        .collect::<Vec<_>>();
-    files.extend(d_files);
-    files
-}
-
 #[cfg(test)]
 mod db {
-    use sqlx::SqlitePool;
-
-    use super::{index_files, query_database};
-    use crate::{database::DatabaseEntry, helper::AudioResult};
+    use super::query_database;
+    use crate::{database::DatabaseEntry, helper::AudioResult, PROGRAM_INFO};
     use pretty_assertions::assert_eq;
     use std::time::Instant;
+
+    fn index_files(dir: impl AsRef<std::path::Path>) -> Vec<&'static str> {
+        let mut dirs = Vec::new();
+        let mut files = Vec::new();
+        for entry in std::fs::read_dir(dir).unwrap().into_iter() {
+            let Ok(entry) = entry else {
+                continue;
+            };
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(stem) = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .and_then(|stem| crate::helper::AUDIO_FILE_STEMS.get(stem).copied())
+                {
+                    files.push(stem);
+                }
+            } else if path.is_dir() {
+                dirs.push(path);
+            }
+        }
+        let d_files = rayon::iter::ParallelIterator::collect::<Vec<_>>(
+            rayon::iter::ParallelIterator::flat_map(
+                rayon::iter::IntoParallelIterator::into_par_iter(dirs),
+                |dir| index_files(dir),
+            ),
+        );
+        files.extend(d_files);
+        files
+    }
 
     #[test]
     fn find_audio_file() {
@@ -292,8 +285,6 @@ mod db {
         e.find_audio_file("F:/Programming/Rust/yomichan_http_server/audio")
             .unwrap();
         println!("sync_elapsed: {:?}", instant.elapsed());
-        e.par_find_audio_files("audio").unwrap();
-        println!("par_elapsed: {:?}", instant.elapsed());
     }
 
     #[test]
@@ -306,9 +297,9 @@ mod db {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn count_entries() {
-        let pool = SqlitePool::connect("audio/entries.db").await.unwrap();
+        let pool = &PROGRAM_INFO.get().unwrap().db;
         let entries: Vec<DatabaseEntry> = sqlx::query_as("SELECT * FROM entries")
-            .fetch_all(&pool)
+            .fetch_all(pool)
             .await
             .unwrap();
         assert_eq!(entries.len(), 924_637);
@@ -320,8 +311,7 @@ mod db {
         let instant = Instant::now();
         let term = "本";
         let reading = "ほん";
-        let pool = SqlitePool::connect("audio/entries.db").await.unwrap();
-        let entries = query_database(term, reading, &pool).await.unwrap();
+        let entries = query_database(term, reading).await.unwrap();
         assert!(!entries.is_empty());
 
         let audio_source_list = AudioResult::create_list(entries.as_slice());
