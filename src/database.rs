@@ -36,8 +36,14 @@ impl DatabaseEntry {
     /// 詰まり..for each directory, it checks if the file exists
     /// without needing to loop over every file.
     pub fn find_audio_file(&self, dir: impl AsRef<Path>) -> Result<PathBuf, AudioFileError> {
+        // if !dir.as_ref().exists() {
+        //     return Err(AudioFileError::MissingAudioFile {
+        //         entry: self.clone(),
+        //         dir: dir.as_ref().display().to_string(),
+        //     });
+        // }
         let format = |p: &Path| p.join(&self.file);
-        for item in read_dir(&dir).expect("bacon").flatten() {
+        for item in read_dir(&dir)?.flatten() {
             let path = item.path();
             let p_name = path.file_name().unwrap().to_str().unwrap();
             if path.is_dir() {
