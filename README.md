@@ -21,15 +21,14 @@ http://localhost:8080/?term={term}&reading={reading}
 - Extract and place the audio file folders inside **`yomichan_audio_server_v0.4.0/audio`**. It should look like this 👇
 - Run the .exe
 ```
-yomichan_audio_server_v0.1.2\
+yomichan_audio_server_v0.1.2/ <- this can be any folder
 ├── audio/
-│   ├── daijisen_files\
-│   ├── jp_forvo_files\
-│   ├── jpod_files\
-│   ├── nhk16_files\
-│   ├── shinmeikai8＿files\
-│   ├── entries.db
-│   ├── entries.v
+│   ├── daijisen/media
+│   ├── jpod/media
+│   ├── nhk16/media
+│   ├── shinmeikai8/media
+│   ├── forvo_jp/
+│   ├── forvo_zh/
 ├── yomichan_audio_server.exe
 ```
 #### Debug: 
