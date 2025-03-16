@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
+use crate::PROGRAM_INFO;
+
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Config {
     pub exit_minutes: u64,
@@ -11,12 +13,13 @@ pub struct Config {
 }
 
 pub fn spawn_headless() {
+    let audio_path = &PROGRAM_INFO.get().unwrap().cli.audio;
     // Launch hidden instance
     #[cfg(target_os = "windows")]
     #[allow(clippy::zombie_processes)]
     std::process::Command::new("yomichan_audio_server.exe")
         .creation_flags(0x00000008) // CREATE_NO_WINDOW
-        .args(["--log", "headless-instance"])
+        .args(["--audio", &audio_path.to_string_lossy(), "--log", "headless-instance"])
         .spawn()
         .unwrap();
 
