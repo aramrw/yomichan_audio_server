@@ -37,7 +37,7 @@ impl DatabaseEntry {
     /// without needing to loop over every file.
     pub fn find_audio_file(&self, dir: impl AsRef<Path>) -> Result<PathBuf, AudioFileError> {
         let format = |p: &Path| p.join(&self.file);
-        for item in read_dir(&dir).expect("bacon").flatten() {
+        for item in read_dir(&dir).expect("theman").flatten() {
             let path = item.path();
             let p_name = path.file_name().unwrap().to_str().unwrap();
             if path.is_dir() {
