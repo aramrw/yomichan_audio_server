@@ -9,6 +9,7 @@ use actix_web::{
     http::header::ContentType, middleware, web, App, HttpRequest, HttpResponse, HttpServer,
     Responder,
 };
+
 use clap::Parser;
 use cli::{Cli, CliLog};
 use color_eyre::eyre::eyre;
@@ -78,6 +79,16 @@ async fn main() -> std::io::Result<()> {
             .init();
     };
 
+    let audio_path = &PROGRAM_INFO.get().unwrap().cli.audio;
+    if !audio_path.exists() {
+        eprintln!(
+            "\nThe `audio` folder was not found at: {}",
+            audio_path.display()
+        );
+        eprintln!("Create one in the same folder as the exe, or run the exe with: `yomichan*.exe --audio <PATH>`\n");
+        process::exit(1);
+    }
+
     match pi.cli.log {
         CliLog::Headless => {
             println!("YOMICHAN_AUDIO_SERVER\n   --HEADLESS");
@@ -100,7 +111,10 @@ async fn main() -> std::io::Result<()> {
     let server = HttpServer::new(|| {
         App::new()
             .wrap(middleware::Logger::default())
-            .service(actix_files::Files::new("/audio", "audio"))
+            .service(actix_files::Files::new(
+                "/audio",
+                &pi.cli.audio,
+            ))
             .route("/", web::get().to(index))
     })
     .bind(&pi.cli.port.inner)?
@@ -129,12 +143,12 @@ async fn index(req: HttpRequest) -> impl Responder {
         return HttpResponse::BadRequest().body("Missing query parameters: 'term' and 'reading'.");
     };
 
-    if !Path::new("./audio").exists() {
-        let e = DbError::MissingAudioFolder(pi.current_exe.clone());
-        println!();
-        eprint_pretty!(e);
-        std::process::exit(1);
-    }
+    // if !program.exists() {
+    //     let e = DbError::MissingAudioFolder(pi.current_exe.clone());
+    //     println!();
+    //     eprint_pretty!(e);
+    //     std::process::exit(1);
+    // }
 
     let entries: Vec<DatabaseEntry> = match database::query_database(term, reading).await {
         Ok(res) => res,

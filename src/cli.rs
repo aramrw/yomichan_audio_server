@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::path::PathBuf;
 
 use clap::builder::ValueParserFactory;
 use clap::{Parser as ClapParser, ValueEnum as ClapValueEnum};
@@ -14,6 +15,9 @@ pub struct Cli {
     pub log: CliLog,
     #[arg(long, default_value_t = PortType::default())]
     pub port: PortType,
+    /// the path to the audio folder. defaults to the executable path.
+    #[arg(short, long, default_value="./audio")]
+    pub audio: PathBuf,
 }
 
 #[derive(ClapValueEnum, Clone, Debug, Default, PartialEq)]

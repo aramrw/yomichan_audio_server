@@ -36,7 +36,7 @@ impl AudioResult {
         if !entries.is_empty() {
             let audio_files_res: Vec<AudioResult> = entries
                 .par_iter()
-                .filter_map(|e| Some(e.to_audio_result().unwrap()))
+                .filter_map(|e| e.to_audio_result().ok())
                 .collect();
             audio_sources_list = audio_files_res;
         }

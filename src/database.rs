@@ -37,7 +37,7 @@ impl DatabaseEntry {
     /// without needing to loop over every file.
     pub fn find_audio_file(&self, dir: impl AsRef<Path>) -> Result<PathBuf, AudioFileError> {
         let format = |p: &Path| p.join(&self.file);
-        for item in read_dir(&dir).unwrap().flatten() {
+        for item in read_dir(&dir).expect("bacon").flatten() {
             let path = item.path();
             let p_name = path.file_name().unwrap().to_str().unwrap();
             if path.is_dir() {
@@ -61,41 +61,45 @@ impl DatabaseEntry {
     // Construct the audio source based on the file path
     pub fn to_audio_result(&self) -> Result<AudioResult, AudioFileError> {
         let pi = PROGRAM_INFO.get().unwrap();
-        let entry = &self;
         let DatabaseEntry {
             source,
             display,
             file,
             ..
-        } = entry;
+        } = self;
 
-        let main_dir = format!("audio/{}", source.to_string());
-        let mut file_path = Path::new(&format!("{}/media", &main_dir)).join(file);
+        // Build the directory using the CLI-supplied audio folder.
+        let read_dir = pi.cli.audio.join(source.to_string());
+
+        // First try: <cli_audio>/<source>/media/<file>
+        let mut file_path = read_dir.join("media").join(file);
+
+        // Fallback: try <cli_audio>/<source>/<display>/<file>
         if !file_path.exists() {
-            file_path = Path::new(&format!("{}/{}", &main_dir, self.display)).join(file);
+            file_path = read_dir.join(&self.display).join(file);
             if !file_path.exists() {
-                let p = self.find_audio_file(&main_dir)?;
-                file_path = p;
+                // If still not found, try custom finder using the read_dir
+                file_path = self.find_audio_file(&read_dir)?;
             }
         }
 
-        // if is forvo file
-        if display.is_empty() {
-            let res = AudioResult {
-                name: source.to_string(),
-                url: format!("http://{}/{}", pi.cli.port.inner, &file_path.display(),),
-            };
-            return Ok(res);
-        }
+        // Compute the relative path from the CLI audio folder so the URL uses the alias.
+        let relative_path = file_path.strip_prefix(&pi.cli.audio).unwrap_or(&file_path);
 
-        // dict files
-        let display = format!("{} {}", source, display);
-        let res = AudioResult {
-            name: display,
-            url: format!("http://localhost:8080/{}", file_path.display()),
+        // Build URL using the alias "audio" (as set up in Actix).
+        let url = format!(
+            "http://{}/audio/{}",
+            pi.cli.port.inner,
+            relative_path.display()
+        );
+
+        let name = if display.is_empty() {
+            source.to_string()
+        } else {
+            format!("{} {}", source, display)
         };
 
-        Ok(res)
+        Ok(AudioResult { name, url })
     }
 }
 
