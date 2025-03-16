@@ -21,7 +21,7 @@ http://localhost:8080/?term={term}&reading={reading}
 - Extract and place the audio file folders inside **`yomichan_audio_server_v0.4.0/audio`**. It should look like this 👇
 - Run the .exe
 ```
-yomichan_audio_server_v0.3.0\
+yomichan_audio_server_v0.1.2\
 ├── audio/
 │   ├── daijisen_files\
 │   ├── jp_forvo_files\
