@@ -52,10 +52,10 @@ impl DatabaseEntry {
                 }
             }
         }
-        return Err(AudioFileError::MissingAudioFile {
+        Err(AudioFileError::MissingAudioFile {
             entry: self.clone(),
             dir: dir.as_ref().display().to_string(),
-        });
+        })
     }
 
     // Construct the audio source based on the file path
@@ -70,9 +70,9 @@ impl DatabaseEntry {
         } = entry;
 
         let main_dir = format!("audio/{}", source.to_string());
-        let mut file_path = Path::new(&format!("{}/media", &main_dir)).join(&file);
+        let mut file_path = Path::new(&format!("{}/media", &main_dir)).join(file);
         if !file_path.exists() {
-            file_path = Path::new(&format!("{}/{}", &main_dir, self.display)).join(&file);
+            file_path = Path::new(&format!("{}/{}", &main_dir, self.display)).join(file);
             if !file_path.exists() {
                 let p = self.find_audio_file(&main_dir)?;
                 file_path = p;
