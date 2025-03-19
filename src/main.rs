@@ -47,6 +47,7 @@ async fn main() -> std::io::Result<()> {
             let mut db_file = std::fs::OpenOptions::new()
                 .write(true)
                 .truncate(true)
+                .create(true)
                 .open("entries.db")
                 .unwrap();
             db_file.write_all(buf).unwrap();
