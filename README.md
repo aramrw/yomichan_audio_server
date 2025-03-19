@@ -12,14 +12,15 @@
 ```
 http://localhost:8080/?term={term}&reading={reading}
 ``` 
-- Copy the above link & paste into the url box just like in the gif below. 👇
+- Copy the above link & paste into the url box just like in the gif below 👇
 <img  src="https://github.com/aramrw/yomichan_audio_server/assets/106574385/0f399e59-f3d4-4b6b-a54e-6daceb6bc582" width="600" />
 
 ### Installation 
-- Download **[`yomichan_audio_server_v0.4.0.zip`](https://github.com/aramrw/yomichan_audio_server/releases/latest/download/yomichan_audio_server_v0.4.0.zip)**.
-- Download the audio files you want _(all recommended)_ from the **[Releases Page](https://github.com/aramrw/yomichan_audio_server/releases/tag/v0.4.0)**.
-- Extract and place the audio file folders inside **`yomichan_audio_server_v0.4.0/audio`**. It should look like this 👇
-- Run the .exe
+- Download **[the latest yomichan_audio_server.exe](https://github.com/aramrw/yomichan_audio_server/releases/latest)**.
+- Put the exe inside any folder you want.
+- Download the audio files you want _(all recommended)_ from the **[Releases Page](https://github.com/aramrw/yomichan_audio_server/releases/latest)**.
+- Create an `audio/` folder and put the audio files inside that folder.
+Make sure it looks like this 👇
 ```
 yomichan_audio_server_v0.1.2/ <- this can be any folder
 ├── audio/
