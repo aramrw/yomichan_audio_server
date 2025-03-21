@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use std::env::current_dir;
 // needed for Command's 'creation_flags' method.
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -19,15 +20,26 @@ pub fn spawn_headless() {
     #[allow(clippy::zombie_processes)]
     std::process::Command::new("yomichan_audio_server.exe")
         .creation_flags(0x00000008) // CREATE_NO_WINDOW
-        .args(["--audio", &audio_path.to_string_lossy(), "--log", "headless-instance"])
+        .args([
+            "--audio",
+            &audio_path.to_string_lossy(),
+            "--log",
+            "headless-instance",
+        ])
         .spawn()
         .unwrap();
 
     #[cfg(target_os = "macos")]
     {
-        let binary_path = current_dir().unwrap().join("yomichan_audio_server");
+        let binary_path = std::env::current_exe().unwrap();
         std::process::Command::new(binary_path)
             .arg("hidden")
+            .args([
+                "--audio",
+                &audio_path.to_string_lossy(),
+                "--log",
+                "headless-instance",
+            ])
             .spawn()
             .unwrap();
     }
