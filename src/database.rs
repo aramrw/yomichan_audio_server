@@ -128,6 +128,7 @@ pub enum AudioSource {
     #[default]
     Daijisen,
     Jpod,
+    Other,
 }
 
 impl std::fmt::Display for AudioSource {
@@ -151,7 +152,7 @@ impl std::str::FromStr for AudioSource {
             "nhk16" => Ok(AudioSource::Nhk16),
             "daijisen" => Ok(AudioSource::Daijisen),
             "jpod" => Ok(AudioSource::Jpod),
-            _ => Err(AudioSourceError::UnkownSource { src: s.to_string() }),
+            _ => Ok(AudioSource::Other), // Err(AudioSourceError::UnkownSource { src: s.to_string() }),
         }
     }
 }
