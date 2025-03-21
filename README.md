@@ -17,8 +17,8 @@ http://localhost:8080/?term={term}&reading={reading}
 
 ### Installation 
 - Download **[the latest yomichan_audio_server.exe](https://github.com/aramrw/yomichan_audio_server/releases/latest)**.
-- Put the exe inside any folder you want.
-- Download the audio files you want _(all recommended)_ from the **[Releases Page](https://github.com/aramrw/yomichan_audio_server/releases/latest)**.
+- Put the exe inside any folder
+- Also download the audio files from the **[releases page](https://github.com/aramrw/yomichan_audio_server/releases/latest)**.
 - Create an `audio/` folder and put the audio files inside that folder.
 Make sure it looks like this 👇
 ```
