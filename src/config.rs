@@ -33,13 +33,15 @@ pub fn spawn_headless() {
     {
         let binary_path = std::env::current_exe().unwrap();
         std::process::Command::new(binary_path)
-            .arg("hidden")
             .args([
                 "--audio",
                 &audio_path.to_string_lossy(),
                 "--log",
                 "headless-instance",
             ])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
             .spawn()
             .unwrap();
     }
