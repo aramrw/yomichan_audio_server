@@ -21,7 +21,7 @@ tray-item = "0.10.0"
 thiserror = "1.0.64"
 clap = { version = "4.5.23", features = ["derive"] }
 tracing = "0.1.41"
-tracing-subscriber = {version = "0.3.19", features = ["env-filter"]}
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 color-eyre = "0.6.3"
 pretty_assertions = "1.4.1"
 indexmap = { version = "2.7.1", features = ["serde"] }
@@ -29,3 +29,9 @@ indexmap = { version = "2.7.1", features = ["serde"] }
 
 [build-dependencies]
 embed-resource = "3.0.1"
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+panic = "abort"
+strip = "debuginfo"
