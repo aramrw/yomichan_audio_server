@@ -111,8 +111,8 @@ impl DatabaseEntry {
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum AudioSourceError {
-    #[error("unknown audio source: {src}")]
-    UnkownSource { src: String },
+    // #[error("unknown audio source: {src}")]
+    // UnkownSource { src: String },
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq, sqlx::Type)]
@@ -165,10 +165,10 @@ pub enum DbError {
         #[from]
         source: SqlxError,
     },
-    #[error("audio folder is missing from the current directory: {0}")]
-    MissingAudioFolder(PathBuf),
-    #[error("entries.db is missing from the audio folder")]
-    MissingEntriesDB,
+    // #[error("audio folder is missing from the current directory: {0}")]
+    // MissingAudioFolder(PathBuf),
+    // #[error("entries.db is missing from the audio folder")]
+    // MissingEntriesDB,
 }
 
 async fn query_forvo_base(
@@ -255,7 +255,7 @@ mod db {
     fn index_files(dir: impl AsRef<std::path::Path>) -> Vec<&'static str> {
         let mut dirs = Vec::new();
         let mut files = Vec::new();
-        for entry in std::fs::read_dir(dir).unwrap().into_iter() {
+        for entry in std::fs::read_dir(dir).unwrap() {
             let Ok(entry) = entry else {
                 continue;
             };
@@ -275,7 +275,7 @@ mod db {
         let d_files = rayon::iter::ParallelIterator::collect::<Vec<_>>(
             rayon::iter::ParallelIterator::flat_map(
                 rayon::iter::IntoParallelIterator::into_par_iter(dirs),
-                |dir| index_files(dir),
+                index_files,
             ),
         );
         files.extend(d_files);

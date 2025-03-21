@@ -1,3 +1,4 @@
+#![allow(unused_imports, clippy::result_large_err)]
 mod cli;
 mod config;
 mod database;
@@ -17,7 +18,7 @@ use config::spawn_headless;
 use database::DatabaseEntry;
 use json::eprint_pretty;
 use sqlx::SqlitePool;
-use std::io::Write;
+use std::io::{self, Error, ErrorKind, Write};
 use std::path::Path;
 use std::process;
 use std::{collections::HashMap, path::PathBuf};
@@ -38,7 +39,7 @@ pub(crate) struct ProgramInfo {
 pub(crate) static PROGRAM_INFO: OnceCell<ProgramInfo> = OnceCell::const_new();
 
 #[actix_web::main]
-async fn main() -> std::io::Result<()> {
+async fn main() -> io::Result<()> {
     println!("Initializing Server Info..");
     PROGRAM_INFO
         .get_or_init(async || {
@@ -158,7 +159,7 @@ async fn index(req: HttpRequest) -> impl Responder {
         Ok(res) => res,
         Err(e) => {
             eprint_pretty!(e);
-            return HttpResponse::from_error(std::io::Error::new(std::io::ErrorKind::Other, e));
+            return HttpResponse::from_error(Error::other(e));
         }
     };
 
@@ -194,6 +195,7 @@ async fn index(req: HttpRequest) -> impl Responder {
         .json(resp)
 }
 
+#[cfg(target_os = "windows")]
 enum Message {
     Quit,
     Debug,
