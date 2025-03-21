@@ -1,3 +1,4 @@
+#![allow(unused_imports, clippy::result_large_err)]
 mod cli;
 mod config;
 mod database;
@@ -17,7 +18,7 @@ use config::spawn_headless;
 use database::{DatabaseEntry, DbError};
 use json::eprint_pretty;
 use sqlx::SqlitePool;
-use std::io::Write;
+use std::io::{self, Error, ErrorKind, Write};
 use std::path::Path;
 use std::process;
 use std::sync::mpsc;
@@ -26,6 +27,7 @@ use std::{collections::HashMap, path::PathBuf};
 use tokio::sync::OnceCell;
 use tracing::debug;
 use tracing_subscriber::EnvFilter;
+#[cfg(target_os = "windows")]
 use tray_item::{IconSource, TrayItem};
 
 pub(crate) struct ProgramInfo {
@@ -39,7 +41,7 @@ pub(crate) struct ProgramInfo {
 pub(crate) static PROGRAM_INFO: OnceCell<ProgramInfo> = OnceCell::const_new();
 
 #[actix_web::main]
-async fn main() -> std::io::Result<()> {
+async fn main() -> io::Result<()> {
     println!("Initializing Server Info..");
     PROGRAM_INFO
         .get_or_init(async || {
@@ -112,10 +114,7 @@ async fn main() -> std::io::Result<()> {
     let server = HttpServer::new(|| {
         App::new()
             .wrap(middleware::Logger::default())
-            .service(actix_files::Files::new(
-                "/audio",
-                &pi.cli.audio,
-            ))
+            .service(actix_files::Files::new("/audio", &pi.cli.audio))
             .route("/", web::get().to(index))
     })
     .bind(&pi.cli.port.inner)?
@@ -155,7 +154,7 @@ async fn index(req: HttpRequest) -> impl Responder {
         Ok(res) => res,
         Err(e) => {
             eprint_pretty!(e);
-            return HttpResponse::from_error(std::io::Error::new(std::io::ErrorKind::Other, e));
+            return HttpResponse::from_error(Error::other(e));
         }
     };
 
@@ -191,11 +190,13 @@ async fn index(req: HttpRequest) -> impl Responder {
         .json(resp)
 }
 
+#[cfg(target_os = "windows")]
 enum Message {
     Quit,
     Debug,
 }
 
+#[cfg(target_os = "windows")]
 async fn init_tray() {
     let pi = PROGRAM_INFO.get().unwrap();
     let mut tray = TrayItem::new(

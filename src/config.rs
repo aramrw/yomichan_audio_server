@@ -30,7 +30,8 @@ pub fn spawn_headless() {
         .spawn()
         .unwrap();
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[allow(clippy::zombie_processes)]
     {
         std::process::Command::new(binary_path)
             .args([
