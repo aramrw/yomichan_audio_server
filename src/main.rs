@@ -26,6 +26,7 @@ use std::{collections::HashMap, path::PathBuf};
 use tokio::sync::OnceCell;
 use tracing::debug;
 use tracing_subscriber::EnvFilter;
+#[cfg(target_os = "windows")]
 use tray_item::{IconSource, TrayItem};
 
 pub(crate) struct ProgramInfo {
@@ -43,6 +44,13 @@ async fn main() -> std::io::Result<()> {
     println!("Initializing Server Info..");
     PROGRAM_INFO
         .get_or_init(async || {
+            let dbpath = Path::new("../entries.db");
+            if !dbpath.exists() {
+                std::process::Command::new(
+                    "curl -L -O https://github.com/aramrw/yomichan_audio_server/releases/downl
+oad/v0.0.1/entries.db",
+                );
+            }
             let buf = include_bytes!("../entries.db");
             let mut db_file = std::fs::OpenOptions::new()
                 .write(true)
@@ -112,10 +120,7 @@ async fn main() -> std::io::Result<()> {
     let server = HttpServer::new(|| {
         App::new()
             .wrap(middleware::Logger::default())
-            .service(actix_files::Files::new(
-                "/audio",
-                &pi.cli.audio,
-            ))
+            .service(actix_files::Files::new("/audio", &pi.cli.audio))
             .route("/", web::get().to(index))
     })
     .bind(&pi.cli.port.inner)?
@@ -196,6 +201,7 @@ enum Message {
     Debug,
 }
 
+#[cfg(target_os = "windows")]
 async fn init_tray() {
     let pi = PROGRAM_INFO.get().unwrap();
     let mut tray = TrayItem::new(
