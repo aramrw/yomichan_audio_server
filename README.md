@@ -2,12 +2,7 @@
 - Instant audio lookup speeds.
 - Tiny memory usage
 - iOS compatible audio files.
-### Included Audio Files 🔉
-- **`NHK16 日本語発音辞典`** (~**1.29** GB) - _**102,823** files_
-- **`Jpod`** (~**1.63** GB) - _**134,103** files_
-- **`大辞泉`** (~**908** MB) - _**61,521** files_
-- **`Forvo`** (~**717** MB) - _**78,835** files_
-- **`新明解８版`** (~**588** MB) - _**66,726** files_
+
 ### Add Audio Server to Yomichan/Yomitan
 ```
 http://localhost:8080/?term={term}&reading={reading}
