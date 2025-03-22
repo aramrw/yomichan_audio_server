@@ -1,7 +1,7 @@
 ### Features
-- ~NanoSecond Audio Lookup Speeds.
-- Tiny Memory Usage
-- iOS Compatible Audio Files.
+- Instant audio lookup speeds.
+- Tiny memory usage
+- iOS compatible audio files.
 ### Included Audio Files 🔉
 - **`NHK16 日本語発音辞典`** (~**1.29** GB) - _**102,823** files_
 - **`Jpod`** (~**1.63** GB) - _**134,103** files_
