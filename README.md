@@ -27,8 +27,8 @@ yomichan_audio_server_v0.1.2/ <- this can be any folder
 │   ├── forvo_zh/
 ├── yomichan_audio_server.exe
 ```
-#### Debug: 
-- If you are having problems, click on the `Debug` menu item in the system tray, and check error messages.
+#### Issues: 
+- If you are having problems, run the program with `yas* --log  `
 - Send bug reports in **[Issues](https://github.com/aramrw/yomichan_audio_server/issues)**.
 
 
