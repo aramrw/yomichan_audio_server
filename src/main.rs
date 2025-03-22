@@ -40,6 +40,7 @@ pub(crate) static PROGRAM_INFO: OnceCell<ProgramInfo> = OnceCell::const_new();
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
+    config::kill_previous_instance();
     println!("Initializing Server Info..");
     PROGRAM_INFO
         .get_or_init(async || {
@@ -63,7 +64,16 @@ oad/v0.0.1/entries.db",
             let cli = Cli::parse();
             let pkg_name = env!("CARGO_PKG_NAME").to_string();
             let db = SqlitePool::connect("entries.db").await.unwrap();
+            //let sys = sysinfo::System::new();
 
+            // std::boxed::Box::<ProgramInfo>::leak(Box::new(ProgramInfo {
+            //     pkg_name,
+            //     version,
+            //     current_exe,
+            //     cli,
+            //     db,
+            //     sys,
+            // }))
             ProgramInfo {
                 pkg_name,
                 version,
@@ -76,7 +86,7 @@ oad/v0.0.1/entries.db",
     let pi = PROGRAM_INFO.get().unwrap();
     let pkg_name = &pi.pkg_name;
 
-    println!("--debug-level: {:#?}", pi.cli.log);
+    println!("--log: {:#?}", pi.cli.log);
     let print_debug_info_fn = || {
         debug!(port = ?pi.cli.port.inner, "\n   raw port:");
         debug!(name = %pkg_name, "\n   pkg_info");
@@ -99,7 +109,7 @@ oad/v0.0.1/entries.db",
 
     match pi.cli.log {
         CliLog::Headless => {
-            println!("YOMICHAN_AUDIO_SERVER\n   --HEADLESS");
+            println!("YOMICHAN_AUDIO_SERVER --HEADLESS");
             spawn_headless();
             process::exit(0);
         }
@@ -114,7 +124,6 @@ oad/v0.0.1/entries.db",
             init_fulltrace_subscriber();
         }
     }
-    config::kill_previous_instance();
 
     let server = HttpServer::new(|| {
         App::new()
