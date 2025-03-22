@@ -8,7 +8,7 @@
 http://localhost:8080/?term={term}&reading={reading}
 ``` 
 - Copy the above link & paste into the url box just like in the gif below 👇
-<img  src="https://github.com/aramrw/yomichan_audio_server/assets/106574385/0f399e59-f3d4-4b6b-a54e-6daceb6bc582" width="600" />
+<img  src="https://github.com/aramrw/yomichan_audio_server/assets/106574385/0f399e59-f3d4-4b6b-a54e-6daceb6bc582" width="450" />
 
 ### Installation (Linux + MacOS + Windows)
 - Download **[the latest yas exe for your system.](https://github.com/aramrw/yomichan_audio_server/releases/latest)**.
