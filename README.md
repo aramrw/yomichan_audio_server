@@ -2,7 +2,6 @@
 - Instant audio lookup speeds.
 - Tiny memory usage
 - iOS compatible audio files.
-
 ### Add Audio Server to Yomichan/Yomitan
 ```
 http://localhost:8080/?term={term}&reading={reading}
