@@ -50,7 +50,7 @@ async fn init_program() -> ProgramInfo {
 
     // init program data
     let version = env!("CARGO_PKG_VERSION").to_string();
-    cprintln!("initializing audio server <y>v{version}</>");
+    cprintln!("audio server <y>v{version}</>");
     let current_exe = std::env::current_exe().unwrap();
     let cli = Cli::parse();
     let pkg_name = env!("CARGO_PKG_NAME").to_string();
@@ -106,7 +106,7 @@ async fn main() -> io::Result<()> {
             audio_path.display()
         );
         ceprintln!("<cyan>[help]</> create one in the same folder as the exe",);
-        ceprintln!("<cyan>[help]</> or run with: {current_exe} <b>--audio</> \"PATH\"",);
+        ceprintln!("<cyan>[help]</> or run with: {current_exe} <b>--audio PATH</>");
 
         process::exit(1);
     }
