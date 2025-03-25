@@ -10,21 +10,26 @@ use tracing::info;
 #[derive(ClapParser, Debug, Clone)]
 #[non_exhaustive]
 pub struct Cli {
-    /// Debug info level.
+    /// Level to display debug information
     #[arg(long, value_enum, default_value = "headless")]
     pub log: CliLog,
+    /// The port to run the server on. Ex: --port 8080
     #[arg(long, default_value_t = PortType::default())]
     pub port: PortType,
-    /// the path to the audio folder. defaults to the executable path.
-    #[arg(short, long, default_value="./audio")]
+    /// The path to the audio folder. defaults to the yas executable path
+    #[arg(short, long, default_value = "./audio")]
     pub audio: PathBuf,
+    /// Prints the available sources. Can be used to sort with "./sort.txt" file
+    #[arg(long)]
+    pub sources: bool,
 }
 
 #[derive(ClapValueEnum, Clone, Debug, Default, PartialEq)]
 pub enum CliLog {
     #[default]
     Headless,
-    // used for checking if a headless instance needs to be spawned or it is the current headless instance
+    // used for checking if a headless instance needs to be spawned
+    // or it is the current headless instance
     HeadlessInstance,
     Dev,
     Full,
@@ -92,38 +97,4 @@ impl Display for PortType {
         let port = &self.inner;
         write!(f, "{port}")
     }
-}
-
-#[derive(thiserror::Error, Debug, Serialize)]
-#[non_exhaustive]
-pub enum PortTypeError {
-    // #[error("Invalid port number: {port}")]
-    // InvalidPort { port: String },
-    // #[error("Failed to parse port: {port}")]
-    // ParseNum { port: String },
-}
-
-impl PortType {
-    // fn new(port: String) -> Self {
-    //     PortType { inner: port }
-    // }
-
-    // pub fn parse_port(&self) -> Result<Self, PortTypeError> {
-    //     let port_range = 0..=65536_u32;
-    //
-    //     let mut p = self.inner.as_str();
-    //     //info!(name: "UNSTRIPPED BYTES", p);
-    //     p = p.strip_prefix("localhost:").unwrap_or(p).trim();
-    //     //info!(name: "STRIPPED BYTES", p);
-    //
-    //     let port = p.to_string();
-    //     let port_u32 = p.parse::<u32>().map_err(|_| PortTypeError::ParseNum {
-    //         port: p.to_string(),
-    //     })?;
-    //     if port_range.contains(&port_u32) {
-    //         Ok(PortType::new(port))
-    //     } else {
-    //         Err(PortTypeError::InvalidPort { port })
-    //     }
-    // }
 }

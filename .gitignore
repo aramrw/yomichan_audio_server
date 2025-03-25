@@ -1,6 +1,7 @@
 /target
-/audio/*
+*audio/*
 yomichan_audio_server.exe
 config.json
 entries.db
 test*
+sort.txt
