@@ -28,5 +28,5 @@ yomichan_audio_server_v0.1.2/ <- this can be any folder
 - run `./yas* --sources` to see sources list
 - add at least 1 source on each line
 ### Issues: 
-- If you are having problems, run the program with `yas* --log  `
+- If you are having problems, run the program with `yas* --log full`
 - Send bug reports in **[Issues](https://github.com/aramrw/yomichan_audio_server/issues)**.
