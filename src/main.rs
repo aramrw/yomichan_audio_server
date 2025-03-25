@@ -20,6 +20,7 @@ use database::{AudioSource, DatabaseEntry};
 use json::eprint_pretty;
 use sqlx::SqlitePool;
 use std::ffi::OsString;
+use std::fmt::Debug;
 use std::fs::{self, read_dir, File};
 use std::io::{self, Error, ErrorKind, Write};
 use std::path::Path;
@@ -48,14 +49,18 @@ async fn init_program() -> ProgramInfo {
         println!("you are missing an entries.db file in the main directory.\ndownload the latest entries.db:\nhttps://github.com/aramrw/yomichan_audio_server/releases/download/v0.0.1/entries.db");
     }
 
+    fn print_arg(arg: &str, x: impl Debug) {
+        cprintln!("<b>--{arg}</>: {x:?}");
+    }
+
     // init program data
     let version = env!("CARGO_PKG_VERSION").to_string();
-    cprintln!("audio server <y>v{version}</>");
+    cprintln!("[yomichan audio server <y>v{version}</>]");
     let current_exe = std::env::current_exe().unwrap();
     let cli = Cli::parse();
     let pkg_name = env!("CARGO_PKG_NAME").to_string();
-    cprintln!("--port: <b>{}</>", cli.port);
-    cprintln!("--log: <b>{:?}</>", cli.log);
+    print_arg("port", &cli.port.inner);
+    print_arg("log", cli.log);
 
     // init database
     let buf = include_bytes!("../entries.db");

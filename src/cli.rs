@@ -24,7 +24,7 @@ pub struct Cli {
     pub sources: bool,
 }
 
-#[derive(ClapValueEnum, Clone, Debug, Default, PartialEq)]
+#[derive(ClapValueEnum, Clone, Copy, Debug, Default, PartialEq)]
 pub enum CliLog {
     #[default]
     Headless,

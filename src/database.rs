@@ -122,15 +122,15 @@ pub enum AudioSourceError {
 #[sqlx(type_name = "TEXT")]
 #[sqlx(rename_all = "lowercase")]
 pub enum AudioSource {
+    #[default]
+    Daijisen,
+    Nhk16,
+    Shinmeikai8,
+    Jpod,
     #[sqlx(rename = "forvo_jp")]
     ForvoJp,
     #[sqlx(rename = "forvo_zh")]
     ForvoZh,
-    Shinmeikai8,
-    Nhk16,
-    #[default]
-    Daijisen,
-    Jpod,
     Other,
 }
 
@@ -149,7 +149,7 @@ impl FromStr for AudioSource {
     type Err = AudioSourceError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "forvo_jp" => Ok(AudioSource::ForvoJp),
+            "forvo" | "forvo_jp" => Ok(AudioSource::ForvoJp),
             "forvo_zh" => Ok(AudioSource::ForvoZh),
             "shinmeikai8" => Ok(AudioSource::Shinmeikai8),
             "nhk16" => Ok(AudioSource::Nhk16),
@@ -162,9 +162,9 @@ impl FromStr for AudioSource {
 
 impl AudioSource {
     pub fn display_all_variants() {
-        cprintln!("\n<b>audio sources</>:");
+        println!("\n[audio sources]");
         for var in AudioSource::iter() {
-            println!(" {var}");
+            println!("{var}");
         }
     }
     pub fn read_sort_file() -> Vec<AudioSource> {
@@ -180,9 +180,9 @@ impl AudioSource {
             return default;
         };
         let order: Vec<AudioSource> = std::fs::read_to_string("./sort.txt")
-            .expect("failed to read sort.txt. you can try deleting the file as it's not necessary")
+            .expect("failed to read sort.txt. try deleting the file as it may be corrupted")
             .lines()
-            .flat_map(|str| AudioSource::from_str(str).ok())
+            .flat_map(|str| AudioSource::from_str(str.trim()).ok())
             .collect();
         if order.is_empty() {
             return default;
