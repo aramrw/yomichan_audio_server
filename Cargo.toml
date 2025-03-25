@@ -24,6 +24,8 @@ tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 color-eyre = "0.6.3"
 pretty_assertions = "1.4.1"
 indexmap = { version = "2.7.1", features = ["serde"] }
+color-print = "0.3.7"
+strum = { version = "0.27.1", features = ["derive"] }
 
 [target.'cfg(windows)'.dependencies]
 [target.'cfg(linux)'.dependencies]
