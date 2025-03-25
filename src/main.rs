@@ -225,7 +225,7 @@ async fn init_tray() {
     )
     .unwrap();
     //tray.add_label("Tray Label").unwrap();
-    let (tx, rx) = mpsc::sync_channel(1);
+    let (tx, rx) = std::sync::mpsc::sync_channel(1);
 
     let debug_tx = tx.clone();
     #[allow(clippy::single_match)]
@@ -247,7 +247,7 @@ async fn init_tray() {
     .unwrap();
 
     loop {
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         if let Ok(msg) = rx.recv() {
             match msg {
                 Message::Quit => process::exit(0),
