@@ -28,4 +28,4 @@ yomichan_audio_server_v0.1.2/ <- this can be any folder
 - add at least 1 source on each line
 ### Issues: 
 - If you are having problems, run the program with `--log full`
-- Send bug reports in **[Issues](https://github.com/aramrw/yomichan_audio_server/issues)**.
+- Make sure to include the operating system and send bug reports in **[Issues](https://github.com/aramrw/yomichan_audio_server/issues)**.
