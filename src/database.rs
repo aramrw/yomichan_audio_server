@@ -1,3 +1,4 @@
+use color_print::cprintln;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sqlx::Error as SqlxError;
@@ -5,11 +6,13 @@ use sqlx::{prelude::FromRow, sqlite::SqlitePool};
 use std::fs::read_dir;
 use std::path::Path;
 use std::path::PathBuf;
+use std::str::FromStr;
+use strum::{EnumIter, IntoEnumIterator};
 use thiserror::Error;
 use tokio::join;
 
-use crate::helper::{AudioFileError, AudioResult, KANA_MAP};
 use crate::PROGRAM_INFO;
+use crate::helper::{AudioFileError, AudioResult, KANA_MAP};
 
 #[derive(Default, Deserialize, Serialize, Debug, FromRow, Clone)]
 pub struct DatabaseEntry {
@@ -36,8 +39,14 @@ impl DatabaseEntry {
     /// 詰まり..for each directory, it checks if the file exists
     /// without needing to loop over every file.
     pub fn find_audio_file(&self, dir: impl AsRef<Path>) -> Result<PathBuf, AudioFileError> {
+        // if !dir.as_ref().exists() {
+        //     return Err(AudioFileError::MissingAudioFile {
+        //         entry: self.clone(),
+        //         dir: dir.as_ref().display().to_string(),
+        //     });
+        // }
         let format = |p: &Path| p.join(&self.file);
-        for item in read_dir(&dir).expect("theman").flatten() {
+        for item in read_dir(&dir)?.flatten() {
             let path = item.path();
             let p_name = path.file_name().unwrap().to_str().unwrap();
             if path.is_dir() {
@@ -105,23 +114,24 @@ impl DatabaseEntry {
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum AudioSourceError {
-    #[error("unknown audio source: {src}")]
-    UnkownSource { src: String },
+    // #[error("unknown audio source: {src}")]
+    // UnkownSource { src: String },
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq, sqlx::Type)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, Default, PartialEq, sqlx::Type, EnumIter)]
 #[sqlx(type_name = "TEXT")]
 #[sqlx(rename_all = "lowercase")]
 pub enum AudioSource {
+    #[default]
+    Daijisen,
+    Nhk16,
+    Shinmeikai8,
+    Jpod,
     #[sqlx(rename = "forvo_jp")]
     ForvoJp,
     #[sqlx(rename = "forvo_zh")]
     ForvoZh,
-    Shinmeikai8,
-    Nhk16,
-    #[default]
-    Daijisen,
-    Jpod,
+    Other,
 }
 
 impl std::fmt::Display for AudioSource {
@@ -135,18 +145,50 @@ impl std::fmt::Display for AudioSource {
     }
 }
 
-impl std::str::FromStr for AudioSource {
+impl FromStr for AudioSource {
     type Err = AudioSourceError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "forvo_jp" => Ok(AudioSource::ForvoJp),
+            "forvo" | "forvo_jp" => Ok(AudioSource::ForvoJp),
             "forvo_zh" => Ok(AudioSource::ForvoZh),
             "shinmeikai8" => Ok(AudioSource::Shinmeikai8),
             "nhk16" => Ok(AudioSource::Nhk16),
             "daijisen" => Ok(AudioSource::Daijisen),
             "jpod" => Ok(AudioSource::Jpod),
-            _ => Err(AudioSourceError::UnkownSource { src: s.to_string() }),
+            _ => Ok(AudioSource::Other), // Err(AudioSourceError::UnkownSource { src: s.to_string() }),
         }
+    }
+}
+
+impl AudioSource {
+    pub fn display_all_variants() {
+        println!("\n[audio sources]");
+        for var in AudioSource::iter() {
+            println!("{var}");
+        }
+    }
+    pub fn read_sort_file() -> Vec<AudioSource> {
+        let default = vec![
+            AudioSource::Daijisen,
+            AudioSource::Nhk16,
+            AudioSource::Shinmeikai8,
+            AudioSource::ForvoJp,
+            AudioSource::ForvoZh,
+            AudioSource::Jpod,
+        ];
+        let Ok(_) = std::fs::File::open("./sort.txt") else {
+            return default;
+        };
+        let order: Vec<AudioSource> = std::fs::read_to_string("./sort.txt")
+            .expect("failed to read sort.txt. try deleting the file as it may be corrupted")
+            .lines()
+            .flat_map(|str| AudioSource::from_str(str.trim()).ok())
+            .collect();
+        if order.is_empty() {
+            return default;
+        }
+        cprintln!("<i><g>+</> sort.txt loaded</>");
+        order
     }
 }
 
@@ -158,10 +200,10 @@ pub enum DbError {
         #[from]
         source: SqlxError,
     },
-    #[error("audio folder is missing from the current directory: {0}")]
-    MissingAudioFolder(PathBuf),
-    #[error("entries.db is missing from the audio folder")]
-    MissingEntriesDB,
+    // #[error("audio folder is missing from the current directory: {0}")]
+    // MissingAudioFolder(PathBuf),
+    // #[error("entries.db is missing from the audio folder")]
+    // MissingEntriesDB,
 }
 
 async fn query_forvo_base(
@@ -219,19 +261,15 @@ pub async fn query_database(term: &str, reading: &str) -> color_eyre::Result<Vec
     query_entries.extend(dict_entries.into_iter().chain(forvo_entries.into_iter()));
 
     query_entries.par_sort_unstable_by(|a, b| {
-        let order = ["daijisen", "nhk16", "shinmeikai8", "forvo", "jpod"];
-
-        // Find the index or use a default value if not found
+        let order = &pi.sort;
         let a_index = order
             .iter()
-            .position(|&x| x == a.source.to_string())
+            .position(|x| *x == a.source)
             .unwrap_or(order.len());
         let b_index = order
             .iter()
-            .position(|&x| x == b.source.to_string())
+            .position(|x| *x == b.source)
             .unwrap_or(order.len());
-
-        // Compare the indices
         a_index.cmp(&b_index)
     });
 
@@ -241,14 +279,14 @@ pub async fn query_database(term: &str, reading: &str) -> color_eyre::Result<Vec
 #[cfg(test)]
 mod db {
     use super::query_database;
-    use crate::{database::DatabaseEntry, helper::AudioResult, PROGRAM_INFO};
+    use crate::{PROGRAM_INFO, database::DatabaseEntry, helper::AudioResult};
     use pretty_assertions::assert_eq;
     use std::time::Instant;
 
     fn index_files(dir: impl AsRef<std::path::Path>) -> Vec<&'static str> {
         let mut dirs = Vec::new();
         let mut files = Vec::new();
-        for entry in std::fs::read_dir(dir).unwrap().into_iter() {
+        for entry in std::fs::read_dir(dir).unwrap() {
             let Ok(entry) = entry else {
                 continue;
             };
@@ -268,7 +306,7 @@ mod db {
         let d_files = rayon::iter::ParallelIterator::collect::<Vec<_>>(
             rayon::iter::ParallelIterator::flat_map(
                 rayon::iter::IntoParallelIterator::into_par_iter(dirs),
-                |dir| index_files(dir),
+                index_files,
             ),
         );
         files.extend(d_files);

@@ -1,7 +1,11 @@
 /target
-/audio/*
+*audio/*
 yomichan_audio_server.exe
 config.json
 entries.db
 test*
+<<<<<<< HEAD
 yas-x86_64-pc-windows.exe
+=======
+sort.txt
+>>>>>>> d6817192bdce3e4428127b65299cd62e6d53056e
