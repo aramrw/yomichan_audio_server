@@ -8,7 +8,7 @@ http://localhost:8080/?term={term}&reading={reading}
 
 ### Installation (Linux + MacOS + Windows)
 - Download **[the latest yas exe](https://github.com/aramrw/yomichan_audio_server/releases/latest)** & put the exe inside any folder
-- Also download the audio files from the **[releases page](https://github.com/aramrw/yomichan_audio_server/releases/latest)**.
+- Also download at least one audio folder from the **[releases page](https://github.com/aramrw/yomichan_audio_server/releases/latest)**.
 - Create an `audio/` folder and put the audio files inside that folder.
 Make sure it looks like this 👇
 ```
