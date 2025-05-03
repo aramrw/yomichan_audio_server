@@ -58,13 +58,13 @@ struct IndexJson<T> {
 
 #[tokio::main]
 pub async fn update_entries() {
-    const INDEX_PATH: &str = "C:\\Users\\arami\\Desktop\\index.json";
+    const INDEX_PATH: &str = "./index.json";
     let file = File::open(INDEX_PATH).unwrap();
     let reader = BufReader::new(file);
     let stream = Deserializer::from_reader(reader).into_iter::<IndexJson<GenericEntryFile>>();
 
     let pool =
-        sqlx::SqlitePool::connect("F:\\Programming\\Rust\\yomichan_http_server\\audio\\entries.db")
+        sqlx::SqlitePool::connect("F:\\Programming\\Rust\\yomichan_http_server\\entries.db")
             .await
             .unwrap();
     create_test_table(&pool).await;

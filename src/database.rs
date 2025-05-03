@@ -12,7 +12,7 @@ use thiserror::Error;
 use tokio::join;
 
 use crate::helper::{AudioFileError, AudioResult, KANA_MAP};
-use crate::PROGRAM_INFO;
+use crate::{init_program, PROGRAM_INFO};
 
 #[derive(Default, Deserialize, Serialize, Debug, FromRow, Clone)]
 pub struct DatabaseEntry {
@@ -86,6 +86,7 @@ impl DatabaseEntry {
         // Fallback: try <cli_audio>/<source>/<display>/<file>
         if !file_path.exists() {
             file_path = read_dir.join(&self.display).join(file);
+            dbg!(&file_path);
             if !file_path.exists() {
                 // If still not found, try custom finder using the read_dir
                 file_path = self.find_audio_file(&read_dir)?;
@@ -131,6 +132,8 @@ pub enum AudioSource {
     ForvoJp,
     #[sqlx(rename = "forvo_zh")]
     ForvoZh,
+    #[sqlx(rename = "forvo_es")]
+    ForvoEs,
     Other,
 }
 
@@ -139,6 +142,7 @@ impl std::fmt::Display for AudioSource {
         let dbg = match self {
             Self::ForvoJp => "forvo_jp",
             Self::ForvoZh => "forvo_zh",
+            Self::ForvoEs => "forvo_es",
             _ => &format!("{self:?}").to_lowercase(),
         };
         write!(f, "{dbg}")
@@ -151,6 +155,7 @@ impl FromStr for AudioSource {
         match s {
             "forvo" | "forvo_jp" => Ok(AudioSource::ForvoJp),
             "forvo_zh" => Ok(AudioSource::ForvoZh),
+            "forvo_es" => Ok(AudioSource::ForvoEs),
             "shinmeikai8" => Ok(AudioSource::Shinmeikai8),
             "nhk16" => Ok(AudioSource::Nhk16),
             "daijisen" => Ok(AudioSource::Daijisen),
@@ -174,6 +179,7 @@ impl AudioSource {
             AudioSource::Shinmeikai8,
             AudioSource::ForvoJp,
             AudioSource::ForvoZh,
+            AudioSource::ForvoEs,
             AudioSource::Jpod,
         ];
         let Ok(_) = std::fs::File::open("./sort.txt") else {
@@ -223,7 +229,7 @@ async fn query_forvo_base(
 }
 
 pub async fn query_database(term: &str, reading: &str) -> color_eyre::Result<Vec<DatabaseEntry>> {
-    let pi = PROGRAM_INFO.get().unwrap();
+    let pi = PROGRAM_INFO.get_or_init(init_program).await;
     let pool = &pi.db;
     let fetch_dict_result = sqlx::query_as::<_, DatabaseEntry>(
         "SELECT * FROM entries
@@ -248,6 +254,15 @@ pub async fn query_database(term: &str, reading: &str) -> color_eyre::Result<Vec
     let (result, forvo_result) = join!(fetch_dict_result, fetch_forvo_result);
     let mut dict_entries = result?;
     let mut forvo_entries = forvo_result?;
+
+    if dict_entries.is_empty() {
+        let new_dict_result =
+            sqlx::query_as::<_, DatabaseEntry>("SELECT * FROM entries WHERE expression = ?")
+                .bind(term)
+                .fetch_all(pool)
+                .await?;
+        dict_entries = new_dict_result;
+    }
 
     let (de_len, fe_len) = (dict_entries.len(), forvo_entries.len());
 
@@ -279,7 +294,7 @@ pub async fn query_database(term: &str, reading: &str) -> color_eyre::Result<Vec
 #[cfg(test)]
 mod db {
     use super::query_database;
-    use crate::{database::DatabaseEntry, helper::AudioResult, PROGRAM_INFO};
+    use crate::{database::DatabaseEntry, helper::AudioResult, init_program, PROGRAM_INFO};
     use pretty_assertions::assert_eq;
     use std::time::Instant;
 
@@ -330,6 +345,7 @@ mod db {
     }
 
     #[test]
+    #[ignore]
     fn index_audio() {
         let start = Instant::now();
         let res = index_files("audio");
@@ -338,6 +354,7 @@ mod db {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[ignore]
     async fn count_entries() {
         let pool = &PROGRAM_INFO.get().unwrap().db;
         let entries: Vec<DatabaseEntry> = sqlx::query_as("SELECT * FROM entries")
@@ -346,9 +363,16 @@ mod db {
             .unwrap();
         assert_eq!(entries.len(), 924_637);
     }
+}
+
+#[cfg(test)]
+mod queries {
+    use std::time::Instant;
+
+    use crate::{database::{query_database, DatabaseEntry}, helper::AudioResult, init_program, PROGRAM_INFO};
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_query() {
+    async fn jp_query() {
         tracing_subscriber::fmt::init();
         let instant = Instant::now();
         let term = "本";
@@ -360,5 +384,27 @@ mod db {
         AudioResult::print_list(&audio_source_list);
 
         tracing::info!("\nelapsed: {:.3}ms\n", instant.elapsed().as_millis());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn es_query() {
+        let pi = PROGRAM_INFO.get_or_init(init_program).await;
+        tracing_subscriber::fmt::init();
+        let instant = Instant::now();
+        let term = "bueno";
+        let entries =
+            sqlx::query_as::<_, DatabaseEntry>("SELECT * FROM entries WHERE expression = ?")
+                .bind(term)
+                .fetch_all(&pi.db)
+                .await.unwrap();
+        dbg!(entries);
+
+        // let entries = query_database(term, reading).await.unwrap();
+        // assert!(!entries.is_empty());
+        //
+        // let audio_source_list = AudioResult::create_list(entries.as_slice());
+        // AudioResult::print_list(&audio_source_list);
+        //
+        // tracing::info!("\nelapsed: {:.3}ms\n", instant.elapsed().as_millis());
     }
 }

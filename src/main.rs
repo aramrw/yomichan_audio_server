@@ -43,7 +43,7 @@ pub(crate) struct ProgramInfo {
 }
 
 pub(crate) static PROGRAM_INFO: OnceCell<ProgramInfo> = OnceCell::const_new();
-async fn init_program() -> ProgramInfo {
+pub(crate) async fn init_program() -> ProgramInfo {
     let dbpath = Path::new("./entries.db");
     if !dbpath.exists() {
         println!("you are missing an entries.db file in the main directory.\ndownload the latest entries.db:\nhttps://github.com/aramrw/yomichan_audio_server/releases/download/v0.0.1/entries.db");
