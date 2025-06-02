@@ -21,6 +21,7 @@ yomichan_audio_server_v0.1.2/ <- this can be any folder
 │   ├── shinmeikai8/media
 │   ├── forvo_jp/
 │   ├── forvo_zh/
+│   ├── forvo_es/
 ├── yomichan_audio_server.exe
 ```
 ### Sorting
