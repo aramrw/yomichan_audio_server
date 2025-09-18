@@ -14,15 +14,18 @@ use actix_web::{
 use clap::Parser;
 use cli::{Cli, CliLog};
 use color_eyre::eyre::eyre;
+use color_eyre::owo_colors::OwoColorize;
 use color_print::{ceprintln, cprintln};
 use config::spawn_headless;
 use database::{AudioSource, DatabaseEntry};
 use json::eprint_pretty;
+use rapidhash::RapidHashMap;
 use sqlx::SqlitePool;
 use std::ffi::OsString;
 use std::fmt::Debug;
 use std::fs::{self, read_dir, File};
 use std::io::{self, Error, ErrorKind, Write};
+use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::process;
 use std::str::FromStr;
@@ -40,6 +43,46 @@ pub(crate) struct ProgramInfo {
     pub cli: Cli,
     pub db: SqlitePool,
     pub sort: Vec<AudioSource>,
+    pub audio_source_map: AudioSourceMap,
+}
+
+#[derive(Default, PartialEq)]
+struct AudioSourceMap {
+    pub map: RapidHashMap<AudioSource, PathBuf>,
+}
+impl Eq for AudioSourceMap {}
+impl Deref for AudioSourceMap {
+    type Target = RapidHashMap<AudioSource, PathBuf>;
+    fn deref(&self) -> &Self::Target {
+        &self.map
+    }
+}
+impl DerefMut for AudioSourceMap {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.map
+    }
+}
+
+impl AudioSourceMap {
+    fn create_source_map(audio_dir: PathBuf) -> Option<Self> {
+        if !audio_dir.exists() {
+            return None;
+        }
+
+        let mut audio_source_map = AudioSourceMap::default();
+        for dir in read_dir(audio_dir).ok()? {
+            let dir = dir.ok()?;
+            let dir_name = dir.file_name().into_string().ok()?;
+
+            match dir_name.as_str() {
+                x if x.contains("daijisen") => {
+                    audio_source_map.insert(AudioSource::Daijisen, dir.path());
+                }
+                _ => unimplemented!(),
+            }
+        }
+        audio_source_map.into()
+    }
 }
 
 pub(crate) static PROGRAM_INFO: OnceCell<ProgramInfo> = OnceCell::const_new();
@@ -73,8 +116,11 @@ pub(crate) async fn init_program() -> ProgramInfo {
     db_file.write_all(buf).unwrap();
     let db = SqlitePool::connect("entries.db").await.unwrap();
 
+    let audio_source_map = AudioSourceMap::create_source_map(cli.audio.clone()).expect("[fatal] could not create source map!");
+
     let sort = AudioSource::read_sort_file();
     ProgramInfo {
+        audio_source_map,
         pkg_name,
         version,
         current_exe,

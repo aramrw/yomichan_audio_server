@@ -125,7 +125,7 @@ pub enum AudioSourceError {
     // UnkownSource { src: String },
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, Default, PartialEq, sqlx::Type, EnumIter)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, Default, PartialEq, sqlx::Type, EnumIter, Hash)]
 #[sqlx(type_name = "TEXT")]
 #[sqlx(rename_all = "lowercase")]
 pub enum AudioSource {
@@ -142,6 +142,7 @@ pub enum AudioSource {
     ForvoEs,
     Other,
 }
+impl Eq for AudioSource {}
 
 impl std::fmt::Display for AudioSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

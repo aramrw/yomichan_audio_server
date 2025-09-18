@@ -1889,6 +1889,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rapidhash"
+version = "4.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "164772177ee16e3b074e6019c63cd92cb3cecf38e8c40d097675958b86dd8084"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "rayon"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3207,6 +3216,7 @@ dependencies = [
  "embed-resource",
  "indexmap",
  "pretty_assertions",
+ "rapidhash",
  "rayon",
  "serde",
  "serde_json",
