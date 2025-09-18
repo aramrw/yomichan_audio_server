@@ -85,7 +85,13 @@ impl DatabaseEntry {
 
         // Fallback: try <cli_audio>/<source>/<display>/<file>
         if !file_path.exists() {
-            file_path = read_dir.join(&self.display).join(file);
+            //file_path = read_dir.join(&self.display).join(file);
+            let sanitized_display = self
+                .display
+                .replace('＼', "")
+                .replace('[', "")
+                .replace(']', "");
+            file_path = read_dir.join(sanitized_display).join(file);
             dbg!(&file_path);
             if !file_path.exists() {
                 // If still not found, try custom finder using the read_dir
@@ -369,7 +375,11 @@ mod db {
 mod queries {
     use std::time::Instant;
 
-    use crate::{database::{query_database, DatabaseEntry}, helper::AudioResult, init_program, PROGRAM_INFO};
+    use crate::{
+        database::{query_database, DatabaseEntry},
+        helper::AudioResult,
+        init_program, PROGRAM_INFO,
+    };
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn jp_query() {
@@ -396,7 +406,8 @@ mod queries {
             sqlx::query_as::<_, DatabaseEntry>("SELECT * FROM entries WHERE expression = ?")
                 .bind(term)
                 .fetch_all(&pi.db)
-                .await.unwrap();
+                .await
+                .unwrap();
         dbg!(entries);
 
         // let entries = query_database(term, reading).await.unwrap();
