@@ -179,7 +179,7 @@ pub async fn index_file(pool: &SqlitePool, index_path: &Path) -> Result<String> 
     println!("parsed index for source: '{src_name}'");
 
     if is_indexed(pool, &src_name).await? {
-        ceprintln!("[indexed]<#f3f3f3> skipping: '{src_name}'</>");
+        ceprintln!("<cyan>[skipping]:</> '{src_name}'");
         return Ok(src_name);
     }
     // Here we convert the parsed data into the unified HashMap.
