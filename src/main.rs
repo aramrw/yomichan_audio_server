@@ -64,30 +64,54 @@ impl DerefMut for AudioSourceMap {
 }
 
 impl AudioSourceMap {
-    fn create_source_map(audio_dir: PathBuf) -> Option<Self> {
+    fn create_source_map(audio_dir: &Path) -> Option<Self> {
         if !audio_dir.exists() {
             return None;
         }
 
         let mut audio_source_map = AudioSourceMap::default();
-        for dir in read_dir(audio_dir).ok()? {
-            let dir = dir.ok()?;
-            let dir_name = dir.file_name().into_string().ok()?;
+        // The read_dir can fail, so handle the Result
+        if let Ok(entries) = read_dir(audio_dir) {
+            for entry in entries.flatten() {
+                if let Ok(file_type) = entry.file_type() {
+                    // Only check directories
+                    if file_type.is_dir() {
+                        let dir_path = entry.path();
+                        let dir_name = entry.file_name().to_string_lossy().to_lowercase();
 
-            match dir_name.as_str() {
-                x if x.contains("daijisen") => {
-                    audio_source_map.insert(AudioSource::Daijisen, dir.path());
+                        // Match on substrings to be flexible
+                        let source_enum = if dir_name.contains("daijisen") {
+                            Some(AudioSource::Daijisen)
+                        } else if dir_name.contains("nhk") {
+                            Some(AudioSource::Nhk16)
+                        } else if dir_name.contains("shinmeikai") {
+                            Some(AudioSource::Shinmeikai8)
+                        } else if dir_name.contains("jpod") {
+                            Some(AudioSource::Jpod)
+                        } else if dir_name.contains("forvo_jp") {
+                            Some(AudioSource::ForvoJp)
+                        } else if dir_name.contains("forvo_zh") {
+                            Some(AudioSource::ForvoZh)
+                        } else if dir_name.contains("forvo_es") {
+                            Some(AudioSource::ForvoEs)
+                        } else {
+                            None
+                        };
+
+                        if let Some(source) = source_enum {
+                            audio_source_map.insert(source, dir_path);
+                        }
+                    }
                 }
-                _ => unimplemented!(),
             }
         }
-        audio_source_map.into()
+        Some(audio_source_map)
     }
 }
 
 pub(crate) static PROGRAM_INFO: OnceCell<ProgramInfo> = OnceCell::const_new();
 pub(crate) async fn init_program() -> ProgramInfo {
-    let dbpath = Path::new("./entries.db");
+    let dbpath = Path::new("./entries-2025.db");
     if !dbpath.exists() {
         println!("you are missing an entries.db file in the main directory.\ndownload the latest entries.db:\nhttps://github.com/aramrw/yomichan_audio_server/releases/download/v0.0.1/entries.db");
     }
@@ -116,7 +140,20 @@ pub(crate) async fn init_program() -> ProgramInfo {
     db_file.write_all(buf).unwrap();
     let db = SqlitePool::connect("entries.db").await.unwrap();
 
-    let audio_source_map = AudioSourceMap::create_source_map(cli.audio.clone()).expect("[fatal] could not create source map!");
+    let audio_source_map = match AudioSourceMap::create_source_map(&cli.audio) {
+        // The `if !map.is_empty()` part is a "match guard".
+        // This arm only executes if we get `Some(map)` AND the map is NOT empty.
+        Some(map) if !map.is_empty() => map,
+
+        // 1. None & 2. Some(map) where the map IS empty.
+        _ => {
+            ceprintln!(
+                "<r>[error]</> No recognizable audio source folders found in '{}'",
+                cli.audio.display()
+            );
+            process::exit(1);
+        }
+    };
 
     let sort = AudioSource::read_sort_file();
     ProgramInfo {

@@ -38,35 +38,32 @@ impl DatabaseEntry {
     ///
     /// 詰まり..for each directory, it checks if the file exists
     /// without needing to loop over every file.
+    // CHANGED: This function is now a simple, robust recursive search.
+    // It will find the file regardless of the subdirectory structure (media, audio, etc.).
     pub fn find_audio_file(&self, dir: impl AsRef<Path>) -> Result<PathBuf, AudioFileError> {
-        // if !dir.as_ref().exists() {
-        //     return Err(AudioFileError::MissingAudioFile {
-        //         entry: self.clone(),
-        //         dir: dir.as_ref().display().to_string(),
-        //     });
-        // }
-        let format = |p: &Path| p.join(&self.file);
-        for item in read_dir(&dir)?.flatten() {
-            let path = item.path();
-            let p_name = path.file_name().unwrap().to_str().unwrap();
+        for entry in read_dir(dir.as_ref())?.flatten() {
+            let path = entry.path();
             if path.is_dir() {
-                let f = format(&path);
-                let f_name = f.file_name().unwrap().to_str().unwrap();
-                if f.exists() && f_name == self.file {
-                    if p_name == self.display || p_name == "media" {
-                        return Ok(f);
-                    }
-                } else if let Ok(f) = self.find_audio_file(&path) {
-                    return Ok(f);
+                // If it's a directory, recurse into it.
+                // If the recursive call finds the file, it returns Ok, and we pass that up.
+                if let Ok(found_path) = self.find_audio_file(&path) {
+                    return Ok(found_path);
+                }
+            } else if let Some(file_name) = path.file_name() {
+                // If it's a file, check if its name matches the target file.
+                if file_name.to_string_lossy() == self.file {
+                    return Ok(path);
                 }
             }
         }
+
+        // If we've searched the entire directory and its children without returning,
+        // then the file was not found in this branch of the file system.
         Err(AudioFileError::MissingAudioFile {
             entry: self.clone(),
             dir: dir.as_ref().display().to_string(),
         })
     }
-
     // Construct the audio source based on the file path
     pub fn to_audio_result(&self) -> Result<AudioResult, AudioFileError> {
         let pi = PROGRAM_INFO.get().unwrap();
@@ -77,27 +74,21 @@ impl DatabaseEntry {
             ..
         } = self;
 
-        // Build the directory using the CLI-supplied audio folder.
-        let read_dir = pi.cli.audio.join(source.to_string());
-
-        // First try: <cli_audio>/<source>/media/<file>
-        let mut file_path = read_dir.join("media").join(file);
-
-        // Fallback: try <cli_audio>/<source>/<display>/<file>
-        if !file_path.exists() {
-            //file_path = read_dir.join(&self.display).join(file);
-            let sanitized_display = self
-                .display
-                .replace('＼', "")
-                .replace('[', "")
-                .replace(']', "");
-            file_path = read_dir.join(sanitized_display).join(file);
-            dbg!(&file_path);
-            if !file_path.exists() {
-                // If still not found, try custom finder using the read_dir
-                file_path = self.find_audio_file(&read_dir)?;
+        // CHANGED: Get the real folder path from the map instead of guessing the name.
+        let source_base_path = match pi.audio_source_map.get(source) {
+            Some(path) => path,
+            None => {
+                return Err(AudioFileError::MissingAudioFile {
+                    entry: self.clone(),
+                    dir: format!("No directory found for source '{}'", source),
+                })
             }
-        }
+        };
+
+        // CHANGED: Removed the brittle checks for "media" and "display" folders.
+        // Use the recursive `find_audio_file` directly. This is much more robust
+        // and will find the file anywhere inside the correct source folder.
+        let file_path = self.find_audio_file(source_base_path)?;
 
         // Compute the relative path from the CLI audio folder so the URL uses the alias.
         let relative_path = file_path.strip_prefix(&pi.cli.audio).unwrap_or(&file_path);
@@ -125,7 +116,9 @@ pub enum AudioSourceError {
     // UnkownSource { src: String },
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, Default, PartialEq, sqlx::Type, EnumIter, Hash)]
+#[derive(
+    Debug, Clone, Copy, Deserialize, Serialize, Default, PartialEq, sqlx::Type, EnumIter, Hash,
+)]
 #[sqlx(type_name = "TEXT")]
 #[sqlx(rename_all = "lowercase")]
 pub enum AudioSource {

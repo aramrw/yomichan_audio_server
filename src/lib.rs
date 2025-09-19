@@ -64,7 +64,7 @@ pub async fn update_entries() {
     let stream = Deserializer::from_reader(reader).into_iter::<IndexJson<GenericEntryFile>>();
 
     let pool =
-        sqlx::SqlitePool::connect("F:\\Programming\\Rust\\yomichan_http_server\\entries.db")
+        sqlx::SqlitePool::connect("F:\\Programming\\Rust\\yomichan_http_server\\entries-2025.db")
             .await
             .unwrap();
     create_test_table(&pool).await;
