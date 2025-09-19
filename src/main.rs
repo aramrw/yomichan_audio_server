@@ -108,17 +108,17 @@ pub(crate) struct ProgramInfo {
     pub current_exe: PathBuf,
     pub cli: Cli,
     pub db: SqlitePool,
-    pub sort: Vec<AudioSource>,
+    pub sort: Vec<String>,
     pub audio_source_map: AudioSourceMap,
 }
 
 #[derive(Default, PartialEq)]
 struct AudioSourceMap {
-    pub map: RapidHashMap<AudioSource, PathBuf>,
+    pub map: RapidHashMap<String, PathBuf>,
 }
 impl Eq for AudioSourceMap {}
 impl Deref for AudioSourceMap {
-    type Target = RapidHashMap<AudioSource, PathBuf>;
+    type Target = RapidHashMap<String, PathBuf>;
     fn deref(&self) -> &Self::Target {
         &self.map
     }
@@ -145,18 +145,13 @@ impl AudioSourceMap {
                         let index_path = dir_path.join("index.json");
 
                         if index_path.exists() {
-                            // THIS BLOCK IS NOW CORRECTED
-                            // We call the single, robust `index_file` function.
-                            // It handles parsing, checking if indexed, and inserting.
-                            // On success, it gives us back the source_name.
                             match indexing::index_file(db, &index_path).await {
                                 Ok(source_name) => {
-                                    let source_enum = AudioSource::from_str(&source_name)
-                                        .unwrap_or(AudioSource::Other);
-                                    audio_source_map.insert(source_enum, dir_path);
+                                    // NO MORE ENUM CONVERSION!
+                                    // We insert the raw source name string directly.
+                                    audio_source_map.insert(source_name, dir_path);
                                 }
                                 Err(e) => {
-                                    // If indexing fails for one directory, print an error but don't crash.
                                     ceprintln!(
                                         "<r>[error]</> Failed to index source in {:?}: {}",
                                         dir_path,
@@ -291,11 +286,12 @@ async fn main() -> io::Result<()> {
 async fn index(req: HttpRequest) -> impl Responder {
     let pi = &PROGRAM_INFO.get().unwrap();
     // access query parameters
-    let query =
-        match actix_web::web::Query::<HashMap<String, String>>::from_query(req.query_string()) {
-            Ok(q) => q,
-            Err(e) => return HttpResponse::from_error(e),
-        };
+    let query = match actix_web::web::Query::<HashMap<String, String>>::from_query(
+        req.query_string(),
+    ) {
+        Ok(q) => q,
+        Err(e) => return HttpResponse::from_error(e),
+    };
     let start = std::time::Instant::now();
     let (Some(term), Some(reading)) = (query.get("term"), query.get("reading")) else {
         return HttpResponse::BadRequest().body("Missing query parameters: 'term' and 'reading'.");

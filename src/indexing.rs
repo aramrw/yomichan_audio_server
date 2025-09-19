@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::fs::File;
 use std::io::BufReader;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 // --- SECTION 1: Structs for the two JSON formats ---
 
@@ -163,7 +163,7 @@ async fn insert_entries(pool: &SqlitePool, entries: Vec<Entry>) -> Result<()> {
 pub async fn index_file(pool: &SqlitePool, index_path: &Path) -> Result<String> {
     create_table_if_not_exists(pool).await?;
 
-    println!("<cyan>[indexing]</>: {index_path:?}");
+    ceprintln!("<cyan>[indexing]</>: {index_path:?}");
     let file = File::open(index_path)
         .with_context(|| format!("cant open index file at {index_path:?}"))?;
     let reader = BufReader::new(file);
@@ -179,7 +179,7 @@ pub async fn index_file(pool: &SqlitePool, index_path: &Path) -> Result<String> 
     println!("parsed index for source: '{src_name}'");
 
     if is_indexed(pool, &src_name).await? {
-        println!("Source '{src_name}' is already indexed. Skipping.");
+        ceprintln!("[indexed]<#f3f3f3> skipping: '{src_name}'</>");
         return Ok(src_name);
     }
     // Here we convert the parsed data into the unified HashMap.
@@ -200,11 +200,11 @@ pub async fn index_file(pool: &SqlitePool, index_path: &Path) -> Result<String> 
     }
 
     ceprintln!(
-        "found {} entries to insert for source '{src_name}'",
+        "<g>found {} entries</> to insert @:'{src_name}'",
         entries_to_insert.len(),
     );
     insert_entries(pool, entries_to_insert).await?;
-    ceprintln!("successfully indexed source: '{src_name}'",);
+    ceprintln!("<g>[]</> indexed source: '{src_name}'",);
 
     Ok(src_name)
 }

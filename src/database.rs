@@ -41,29 +41,42 @@ impl DatabaseEntry {
     // CHANGED: This function is now a simple, robust recursive search.
     // It will find the file regardless of the subdirectory structure (media, audio, etc.).
     pub fn find_audio_file(&self, dir: impl AsRef<Path>) -> Result<PathBuf, AudioFileError> {
-        for entry in read_dir(dir.as_ref())?.flatten() {
+        // 1. Get the target filename from the database entry, but without its extension.
+        let target_stem = match Path::new(&self.file).file_stem() {
+            Some(stem) => stem,
+            // If the filename in the DB has no stem (e.g., it's just ".mp3"), we can't match it.
+            None => {
+                return Err(AudioFileError::MissingAudioFile {
+                    entry: self.clone(),
+                    dir: dir.as_ref().display().to_string(),
+                })
+            }
+        };
+
+        // 2. Recursively search the directory.
+        for entry in std::fs::read_dir(dir.as_ref())?.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                // If it's a directory, recurse into it.
-                // If the recursive call finds the file, it returns Ok, and we pass that up.
+                // If it's a directory, recurse into it. If we find the file, return immediately.
                 if let Ok(found_path) = self.find_audio_file(&path) {
                     return Ok(found_path);
                 }
-            } else if let Some(file_name) = path.file_name() {
-                // If it's a file, check if its name matches the target file.
-                if file_name.to_string_lossy() == self.file {
+            } else if let Some(disk_stem) = path.file_stem() {
+                // 3. If it's a file, compare its stem to our target stem.
+                if disk_stem == target_stem {
+                    // If they match, we've found our audio file, regardless of its extension.
                     return Ok(path);
                 }
             }
         }
 
-        // If we've searched the entire directory and its children without returning,
-        // then the file was not found in this branch of the file system.
+        // If we search the whole directory and find nothing, return an error.
         Err(AudioFileError::MissingAudioFile {
             entry: self.clone(),
             dir: dir.as_ref().display().to_string(),
         })
     }
+
     // Construct the audio source based on the file path
     pub fn to_audio_result(&self) -> Result<AudioResult, AudioFileError> {
         let pi = PROGRAM_INFO.get().unwrap();
@@ -74,9 +87,8 @@ impl DatabaseEntry {
             ..
         } = self;
 
-        let source_enum = AudioSource::from_str(source).unwrap_or(AudioSource::Other);
-
-        let source_base_path = match pi.audio_source_map.get(&source_enum) {
+        let source_base_path = match pi.audio_source_map.get(source) {
+            // Use `source` string directly
             Some(path) => path,
             None => {
                 return Err(AudioFileError::MissingAudioFile {
@@ -161,9 +173,10 @@ async fn query_forvo_base(
 pub async fn query_database(term: &str, reading: &str) -> color_eyre::Result<Vec<DatabaseEntry>> {
     let pi = PROGRAM_INFO.get_or_init(init_program).await;
     let pool = &pi.db;
+
     let fetch_dict_result = sqlx::query_as::<_, DatabaseEntry>(
         "SELECT * FROM entries
-        WHERE expression = ? AND (reading = ? OR reading IS NULL)",
+    WHERE expression = ? AND (reading = ? OR reading IS NULL)", // This is the flexible query
     )
     .bind(term)
     .bind(reading)
@@ -185,13 +198,17 @@ pub async fn query_database(term: &str, reading: &str) -> color_eyre::Result<Vec
     let mut dict_entries = result?;
     let mut forvo_entries = forvo_result?;
 
+    // temp debug
+    dbg!(&dict_entries);
+
     if dict_entries.is_empty() {
-        let new_dict_result =
+        let fallback_entries =
             sqlx::query_as::<_, DatabaseEntry>("SELECT * FROM entries WHERE expression = ?")
                 .bind(term)
                 .fetch_all(pool)
                 .await?;
-        dict_entries = new_dict_result;
+        // Add the new results to the (empty) list.
+        dict_entries.extend(fallback_entries);
     }
 
     let (de_len, fe_len) = (dict_entries.len(), forvo_entries.len());
@@ -207,13 +224,14 @@ pub async fn query_database(term: &str, reading: &str) -> color_eyre::Result<Vec
 
     query_entries.par_sort_unstable_by(|a, b| {
         let order = &pi.sort;
+        // We now compare the source string directly with the strings in the sort order.
         let a_index = order
             .iter()
-            .position(|x| *x == AudioSource::from_str(&a.source).unwrap_or(AudioSource::Other))
+            .position(|x| x == &a.source) // Simple string comparison
             .unwrap_or(order.len());
         let b_index = order
             .iter()
-            .position(|x| *x == AudioSource::from_str(&b.source).unwrap_or(AudioSource::Other))
+            .position(|x| x == &b.source) // Simple string comparison
             .unwrap_or(order.len());
         a_index.cmp(&b_index)
     });
