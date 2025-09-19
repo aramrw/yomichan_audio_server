@@ -3,6 +3,7 @@ mod cli;
 mod config;
 mod database;
 mod helper;
+mod indexing;
 
 use crate::helper::AudioResult;
 
@@ -17,9 +18,10 @@ use color_eyre::eyre::eyre;
 use color_eyre::owo_colors::OwoColorize;
 use color_print::{ceprintln, cprintln};
 use config::spawn_headless;
-use database::{AudioSource, DatabaseEntry};
-use json::eprint_pretty;
+use database::DatabaseEntry;
+
 use rapidhash::RapidHashMap;
+use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::ffi::OsString;
 use std::fmt::Debug;
@@ -30,11 +32,75 @@ use std::path::Path;
 use std::process;
 use std::str::FromStr;
 use std::{collections::HashMap, path::PathBuf};
+use strum::EnumIter;
 use tokio::sync::OnceCell;
 use tracing::debug;
 use tracing_subscriber::EnvFilter;
 #[cfg(target_os = "windows")]
 use tray_item::{IconSource, TrayItem};
+
+#[macro_use]
+mod macros {
+    #[macro_export]
+    macro_rules! eprint_pretty {
+        ($e:expr) => {
+            let r = eyre!("{}", $e);
+            eprintln!("{:?}", r);
+        };
+    }
+}
+
+#[derive(
+    Debug, Clone, Copy, Deserialize, Serialize, Default, PartialEq, sqlx::Type, EnumIter, Hash,
+)]
+#[sqlx(type_name = "TEXT")]
+#[sqlx(rename_all = "lowercase")]
+pub enum AudioSource {
+    #[default]
+    Daijisen,
+    Nhk16,
+    Shinmeikai8,
+    Jpod,
+    #[sqlx(rename = "forvo_jp")]
+    ForvoJp,
+    #[sqlx(rename = "forvo_zh")]
+    ForvoZh,
+    #[sqlx(rename = "forvo_es")]
+    ForvoEs,
+    Other,
+}
+
+impl Eq for AudioSource {}
+
+impl std::fmt::Display for AudioSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let dbg = match self {
+            Self::ForvoJp => "forvo_jp",
+            Self::ForvoZh => "forvo_zh",
+            Self::ForvoEs => "forvo_es",
+            _ => &format!("{self:?}").to_lowercase(),
+        };
+        write!(f, "{dbg}")
+    }
+}
+
+impl FromStr for AudioSource {
+    type Err = AudioSource;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s_lower = s.to_lowercase();
+        match s_lower.as_str() {
+            s if s.contains("forvo_jp") => Ok(AudioSource::ForvoJp),
+            s if s.contains("forvo_zh") => Ok(AudioSource::ForvoZh),
+            s if s.contains("forvo_es") => Ok(AudioSource::ForvoEs),
+            s if s.contains("shinmeikai") => Ok(AudioSource::Shinmeikai8),
+            s if s.contains("nhk") => Ok(AudioSource::Nhk16),
+            s if s.contains("daijisen") => Ok(AudioSource::Daijisen),
+            s if s.contains("jpod") => Ok(AudioSource::Jpod),
+            _ => Ok(AudioSource::Other),
+        }
+    }
+}
 
 pub(crate) struct ProgramInfo {
     pub pkg_name: String,
@@ -57,6 +123,7 @@ impl Deref for AudioSourceMap {
         &self.map
     }
 }
+
 impl DerefMut for AudioSourceMap {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.map
@@ -64,42 +131,39 @@ impl DerefMut for AudioSourceMap {
 }
 
 impl AudioSourceMap {
-    fn create_source_map(audio_dir: &Path) -> Option<Self> {
+    async fn create_source_map(audio_dir: &Path, db: &SqlitePool) -> Option<Self> {
         if !audio_dir.exists() {
             return None;
         }
 
         let mut audio_source_map = AudioSourceMap::default();
-        // The read_dir can fail, so handle the Result
         if let Ok(entries) = read_dir(audio_dir) {
             for entry in entries.flatten() {
                 if let Ok(file_type) = entry.file_type() {
-                    // Only check directories
                     if file_type.is_dir() {
                         let dir_path = entry.path();
-                        let dir_name = entry.file_name().to_string_lossy().to_lowercase();
+                        let index_path = dir_path.join("index.json");
 
-                        // Match on substrings to be flexible
-                        let source_enum = if dir_name.contains("daijisen") {
-                            Some(AudioSource::Daijisen)
-                        } else if dir_name.contains("nhk") {
-                            Some(AudioSource::Nhk16)
-                        } else if dir_name.contains("shinmeikai") {
-                            Some(AudioSource::Shinmeikai8)
-                        } else if dir_name.contains("jpod") {
-                            Some(AudioSource::Jpod)
-                        } else if dir_name.contains("forvo_jp") {
-                            Some(AudioSource::ForvoJp)
-                        } else if dir_name.contains("forvo_zh") {
-                            Some(AudioSource::ForvoZh)
-                        } else if dir_name.contains("forvo_es") {
-                            Some(AudioSource::ForvoEs)
-                        } else {
-                            None
-                        };
-
-                        if let Some(source) = source_enum {
-                            audio_source_map.insert(source, dir_path);
+                        if index_path.exists() {
+                            // THIS BLOCK IS NOW CORRECTED
+                            // We call the single, robust `index_file` function.
+                            // It handles parsing, checking if indexed, and inserting.
+                            // On success, it gives us back the source_name.
+                            match indexing::index_file(db, &index_path).await {
+                                Ok(source_name) => {
+                                    let source_enum = AudioSource::from_str(&source_name)
+                                        .unwrap_or(AudioSource::Other);
+                                    audio_source_map.insert(source_enum, dir_path);
+                                }
+                                Err(e) => {
+                                    // If indexing fails for one directory, print an error but don't crash.
+                                    ceprintln!(
+                                        "<r>[error]</> Failed to index source in {:?}: {}",
+                                        dir_path,
+                                        e
+                                    );
+                                }
+                            }
                         }
                     }
                 }
@@ -111,11 +175,6 @@ impl AudioSourceMap {
 
 pub(crate) static PROGRAM_INFO: OnceCell<ProgramInfo> = OnceCell::const_new();
 pub(crate) async fn init_program() -> ProgramInfo {
-    let dbpath = Path::new("./entries-2025.db");
-    if !dbpath.exists() {
-        println!("you are missing an entries.db file in the main directory.\ndownload the latest entries.db:\nhttps://github.com/aramrw/yomichan_audio_server/releases/download/v0.0.1/entries.db");
-    }
-
     fn print_arg(arg: &str, x: impl Debug) {
         cprintln!("<b>--{arg}</>: {x:?}");
     }
@@ -129,33 +188,29 @@ pub(crate) async fn init_program() -> ProgramInfo {
     print_arg("port", &cli.port.inner);
     print_arg("log", cli.log);
 
-    // init database
-    let buf = include_bytes!("../entries.db");
-    let mut db_file = std::fs::OpenOptions::new()
-        .write(true)
-        .truncate(true)
-        .create(true)
-        .open("entries.db")
-        .unwrap();
-    db_file.write_all(buf).unwrap();
-    let db = SqlitePool::connect("entries.db").await.unwrap();
+    // --- THIS IS THE FIX ---
+    // Connect to the database. The `rwc` (read/write/create) mode will automatically
+    // create the `entries.db` file if it does not exist. The old logic that
+    // overwrote the database on every startup has been removed.
+    let db = SqlitePool::connect("sqlite:entries.db?mode=rwc")
+        .await
+        .expect("Failed to connect to database. Ensure you have write permissions.");
 
-    let audio_source_map = match AudioSourceMap::create_source_map(&cli.audio) {
+    let audio_source_map = match AudioSourceMap::create_source_map(&cli.audio, &db).await {
         // The `if !map.is_empty()` part is a "match guard".
         // This arm only executes if we get `Some(map)` AND the map is NOT empty.
         Some(map) if !map.is_empty() => map,
 
         // 1. None & 2. Some(map) where the map IS empty.
         _ => {
-            ceprintln!(
+            panic!(
                 "<r>[error]</> No recognizable audio source folders found in '{}'",
                 cli.audio.display()
             );
-            process::exit(1);
         }
     };
 
-    let sort = AudioSource::read_sort_file();
+    let sort = Vec::new();
     ProgramInfo {
         audio_source_map,
         pkg_name,
@@ -171,11 +226,6 @@ pub(crate) async fn init_program() -> ProgramInfo {
 async fn main() -> io::Result<()> {
     PROGRAM_INFO.get_or_init(init_program).await;
     let pi = PROGRAM_INFO.get().unwrap();
-
-    if pi.cli.sources {
-        AudioSource::display_all_variants();
-        process::exit(0);
-    }
 
     let pkg_name = &pi.pkg_name;
 

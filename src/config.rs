@@ -64,6 +64,7 @@ pub fn spawn_headless() {
     // }
 }
 
+// this is not used for some reasn
 fn find_process(sys: &mut System) -> Option<(&Pid, &Process)> {
     let current_pid = std::process::id();
     println!("current pid: {current_pid}");
@@ -89,6 +90,7 @@ fn find_process(sys: &mut System) -> Option<(&Pid, &Process)> {
     None
 }
 
+// this is not used for some reasn
 pub fn kill_previous_instance() {
     let mut sys = System::new_all();
     let Some((pid, proc)) = find_process(&mut sys) else {

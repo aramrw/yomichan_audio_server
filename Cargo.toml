@@ -27,6 +27,7 @@ indexmap = { version = "2.7.1", features = ["serde"] }
 color-print = "0.3.7"
 strum = { version = "0.27.1", features = ["derive"] }
 rapidhash = { version = "4.1.0", features = ["unsafe"] }
+orx-parallel = { version = "3.2.0", features = ["generic_iterator"] }
 
 [target.'cfg(any(windows, linux))'.dependencies]
 tray-item = "0.10.0"

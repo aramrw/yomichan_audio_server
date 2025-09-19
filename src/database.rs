@@ -12,13 +12,13 @@ use thiserror::Error;
 use tokio::join;
 
 use crate::helper::{AudioFileError, AudioResult, KANA_MAP};
-use crate::{init_program, PROGRAM_INFO};
+use crate::{init_program, AudioSource, PROGRAM_INFO};
 
 #[derive(Default, Deserialize, Serialize, Debug, FromRow, Clone)]
 pub struct DatabaseEntry {
     pub expression: String,
     pub reading: Option<String>,
-    pub source: AudioSource,
+    pub source: String,
     pub speaker: Option<String>,
     pub display: String,
     pub file: String,
@@ -74,8 +74,9 @@ impl DatabaseEntry {
             ..
         } = self;
 
-        // CHANGED: Get the real folder path from the map instead of guessing the name.
-        let source_base_path = match pi.audio_source_map.get(source) {
+        let source_enum = AudioSource::from_str(source).unwrap_or(AudioSource::Other);
+
+        let source_base_path = match pi.audio_source_map.get(&source_enum) {
             Some(path) => path,
             None => {
                 return Err(AudioFileError::MissingAudioFile {
@@ -84,6 +85,17 @@ impl DatabaseEntry {
                 })
             }
         };
+
+        // OLD:
+        // let source_base_path = match pi.audio_source_map.get(source) {
+        //     Some(path) => path,
+        //     None => {
+        //         return Err(AudioFileError::MissingAudioFile {
+        //             entry: self.clone(),
+        //             dir: format!("No directory found for source '{}'", source),
+        //         })
+        //     }
+        // };
 
         // CHANGED: Removed the brittle checks for "media" and "display" folders.
         // Use the recursive `find_audio_file` directly. This is much more robust
@@ -114,88 +126,6 @@ impl DatabaseEntry {
 pub enum AudioSourceError {
     // #[error("unknown audio source: {src}")]
     // UnkownSource { src: String },
-}
-
-#[derive(
-    Debug, Clone, Copy, Deserialize, Serialize, Default, PartialEq, sqlx::Type, EnumIter, Hash,
-)]
-#[sqlx(type_name = "TEXT")]
-#[sqlx(rename_all = "lowercase")]
-pub enum AudioSource {
-    #[default]
-    Daijisen,
-    Nhk16,
-    Shinmeikai8,
-    Jpod,
-    #[sqlx(rename = "forvo_jp")]
-    ForvoJp,
-    #[sqlx(rename = "forvo_zh")]
-    ForvoZh,
-    #[sqlx(rename = "forvo_es")]
-    ForvoEs,
-    Other,
-}
-impl Eq for AudioSource {}
-
-impl std::fmt::Display for AudioSource {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let dbg = match self {
-            Self::ForvoJp => "forvo_jp",
-            Self::ForvoZh => "forvo_zh",
-            Self::ForvoEs => "forvo_es",
-            _ => &format!("{self:?}").to_lowercase(),
-        };
-        write!(f, "{dbg}")
-    }
-}
-
-impl FromStr for AudioSource {
-    type Err = AudioSourceError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "forvo" | "forvo_jp" => Ok(AudioSource::ForvoJp),
-            "forvo_zh" => Ok(AudioSource::ForvoZh),
-            "forvo_es" => Ok(AudioSource::ForvoEs),
-            "shinmeikai8" => Ok(AudioSource::Shinmeikai8),
-            "nhk16" => Ok(AudioSource::Nhk16),
-            "daijisen" => Ok(AudioSource::Daijisen),
-            "jpod" => Ok(AudioSource::Jpod),
-            _ => Ok(AudioSource::Other), // Err(AudioSourceError::UnkownSource { src: s.to_string() }),
-        }
-    }
-}
-
-impl AudioSource {
-    pub fn display_all_variants() {
-        println!("\n[audio sources]");
-        for var in AudioSource::iter() {
-            println!("{var}");
-        }
-    }
-    pub fn read_sort_file() -> Vec<AudioSource> {
-        let default = vec![
-            AudioSource::Daijisen,
-            AudioSource::Nhk16,
-            AudioSource::Shinmeikai8,
-            AudioSource::ForvoJp,
-            AudioSource::ForvoZh,
-            AudioSource::ForvoEs,
-            AudioSource::Jpod,
-        ];
-        let Ok(_) = std::fs::File::open("./sort.txt") else {
-            return default;
-        };
-        let order: Vec<AudioSource> = std::fs::read_to_string("./sort.txt")
-            .expect("failed to read sort.txt. try deleting the file as it may be corrupted")
-            .lines()
-            .flat_map(|str| AudioSource::from_str(str.trim()).ok())
-            .collect();
-        if order.is_empty() {
-            return default;
-        }
-        cprintln!("<i><g>+</> sort.txt loaded</>");
-        order
-    }
 }
 
 // Define your custom error type
@@ -233,7 +163,7 @@ pub async fn query_database(term: &str, reading: &str) -> color_eyre::Result<Vec
     let pool = &pi.db;
     let fetch_dict_result = sqlx::query_as::<_, DatabaseEntry>(
         "SELECT * FROM entries
-        WHERE expression = ? AND reading = ?",
+        WHERE expression = ? AND (reading = ? OR reading IS NULL)",
     )
     .bind(term)
     .bind(reading)
@@ -279,11 +209,11 @@ pub async fn query_database(term: &str, reading: &str) -> color_eyre::Result<Vec
         let order = &pi.sort;
         let a_index = order
             .iter()
-            .position(|x| *x == a.source)
+            .position(|x| *x == AudioSource::from_str(&a.source).unwrap_or(AudioSource::Other))
             .unwrap_or(order.len());
         let b_index = order
             .iter()
-            .position(|x| *x == b.source)
+            .position(|x| *x == AudioSource::from_str(&b.source).unwrap_or(AudioSource::Other))
             .unwrap_or(order.len());
         a_index.cmp(&b_index)
     });
@@ -333,7 +263,7 @@ mod db {
         let e = DatabaseEntry {
             expression: "日本語".to_string(),
             reading: Some("にほんご".to_string()),
-            source: super::AudioSource::ForvoJp,
+            source: super::AudioSource::ForvoJp.to_string(),
             speaker: Some("strawberrybrown".to_string()),
             display: "strawberrybrown".to_string(),
             file: "日本語.mp3".to_string(),
