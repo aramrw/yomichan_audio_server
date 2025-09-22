@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::ffi::OsString;
 use std::fmt::Debug;
-use std::fs::{self, read_dir, File};
+use std::fs::{self, read_dir, File, FileType};
 use std::io::{self, Error, ErrorKind, Write};
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
@@ -137,30 +137,53 @@ impl AudioSourceMap {
         }
 
         let mut audio_source_map = AudioSourceMap::default();
-        if let Ok(entries) = read_dir(audio_dir) {
-            for entry in entries.flatten() {
-                if let Ok(file_type) = entry.file_type() {
-                    if file_type.is_dir() {
-                        let dir_path = entry.path();
-                        let index_path = dir_path.join("index.json");
+        let entries = read_dir(audio_dir).ok()?;
 
-                        if index_path.exists() {
-                            match indexing::index_file(db, &index_path).await {
-                                Ok(source_name) => {
-                                    // NO MORE ENUM CONVERSION!
-                                    // We insert the raw source name string directly.
-                                    audio_source_map.insert(source_name, dir_path);
-                                }
-                                Err(e) => {
-                                    ceprintln!(
-                                        "<r>[error]</> Failed to index source in {:?}: {}",
-                                        dir_path,
-                                        e
-                                    );
-                                }
-                            }
-                        }
-                    }
+        for entry in entries.flatten() {
+            let Ok(file_type) = entry.file_type() else {
+                ceprintln!("<r>[error]</> could not get file type");
+                continue;
+            };
+
+            if !file_type.is_dir() {
+                continue;
+            }
+
+            let dir_path = entry.path();
+
+            let maybe_json_path: Option<PathBuf> = fs::read_dir(&dir_path)
+                .ok() // Convert Result into an Option, discarding the error
+                .and_then(|read_dir| {
+                    read_dir
+                        .flatten() // Ignore entries that cause an error
+                        // Find the first entry that has a "json" extension
+                        .find(|entry| entry.path().extension().map_or(false, |ext| ext == "json"))
+                        // If an entry was found, get its path
+                        .map(|entry| entry.path())
+                });
+
+            // Now you can use the discovered path
+            let Some(found_path) = maybe_json_path else {
+                ceprintln!("<r>[error]</> No <r>.json</> file found in: <r>{dir_path:?}</>");
+                continue;
+            };
+
+            let index_path = found_path;
+
+            if !index_path.exists() {
+                continue;
+            }
+
+            match indexing::index_file(db, &index_path).await {
+                Ok(source_name) => {
+                    audio_source_map.insert(source_name, dir_path);
+                }
+                Err(e) => {
+                    ceprintln!(
+                        "<r>[error]</> Failed to index source in {:?}: {}",
+                        dir_path,
+                        e
+                    );
                 }
             }
         }
@@ -195,16 +218,17 @@ pub(crate) async fn init_program() -> ProgramInfo {
         // The `if !map.is_empty()` part is a "match guard".
         // This arm only executes if we get `Some(map)` AND the map is NOT empty.
         Some(map) if !map.is_empty() => map,
-
         // 1. None & 2. Some(map) where the map IS empty.
         _ => {
-            panic!(
-                "<r>[error]</> No recognizable audio source folders found in '{}'",
+            ceprintln!(
+                "<r>[panic]</> No recognizable audio source folders found in '{}'",
                 cli.audio.display()
             );
+            panic!();
         }
     };
 
+    ceprintln!("<g>[ready]</>");
     let sort = Vec::new();
     ProgramInfo {
         audio_source_map,
@@ -219,6 +243,15 @@ pub(crate) async fn init_program() -> ProgramInfo {
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
+    let cli = Cli::parse();
+
+    if cli.log == CliLog::Headless {
+        config::kill_previous_instance();
+        config::spawn_headless(&cli);
+        cprintln!("<g>✓</> [started]");
+        std::process::exit(0);
+    }
+
     PROGRAM_INFO.get_or_init(init_program).await;
     let pi = PROGRAM_INFO.get().unwrap();
 
@@ -253,7 +286,7 @@ async fn main() -> io::Result<()> {
 
     match pi.cli.log {
         CliLog::Headless => {
-            spawn_headless();
+            spawn_headless(&cli);
             process::exit(0);
         }
         CliLog::HeadlessInstance => {}
@@ -286,12 +319,11 @@ async fn main() -> io::Result<()> {
 async fn index(req: HttpRequest) -> impl Responder {
     let pi = &PROGRAM_INFO.get().unwrap();
     // access query parameters
-    let query = match actix_web::web::Query::<HashMap<String, String>>::from_query(
-        req.query_string(),
-    ) {
-        Ok(q) => q,
-        Err(e) => return HttpResponse::from_error(e),
-    };
+    let query =
+        match actix_web::web::Query::<HashMap<String, String>>::from_query(req.query_string()) {
+            Ok(q) => q,
+            Err(e) => return HttpResponse::from_error(e),
+        };
     let start = std::time::Instant::now();
     let (Some(term), Some(reading)) = (query.get("term"), query.get("reading")) else {
         return HttpResponse::BadRequest().body("Missing query parameters: 'term' and 'reading'.");

@@ -11,6 +11,7 @@ use strum::{EnumIter, IntoEnumIterator};
 use thiserror::Error;
 use tokio::join;
 
+use crate::cli::CliLog;
 use crate::helper::{AudioFileError, AudioResult, KANA_MAP};
 use crate::{init_program, AudioSource, PROGRAM_INFO};
 
@@ -134,26 +135,20 @@ impl DatabaseEntry {
     }
 }
 
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum AudioSourceError {
-    // #[error("unknown audio source: {src}")]
-    // UnkownSource { src: String },
-}
-
-// Define your custom error type
-#[derive(Debug, Error)]
-pub enum DbError {
-    #[error("SQLx Error Occurred: {source}")]
-    SqlxError {
-        #[from]
-        source: SqlxError,
-    },
-    // #[error("audio folder is missing from the current directory: {0}")]
-    // MissingAudioFolder(PathBuf),
-    // #[error("entries.db is missing from the audio folder")]
-    // MissingEntriesDB,
-}
-
+// // Define your custom error type
+// #[derive(Debug, Error)]
+// pub enum DbError {
+//     #[error("SQLx Error Occurred: {source}")]
+//     SqlxError {
+//         #[from]
+//         source: SqlxError,
+//     },
+//     // #[error("audio folder is missing from the current directory: {0}")]
+//     // MissingAudioFolder(PathBuf),
+//     // #[error("entries.db is missing from the audio folder")]
+//     // MissingEntriesDB,
+// }
+//
 async fn query_forvo_base(
     source: &str,
     term: &str,
@@ -199,7 +194,10 @@ pub async fn query_database(term: &str, reading: &str) -> color_eyre::Result<Vec
     let mut forvo_entries = forvo_result?;
 
     // temp debug
-    dbg!(&dict_entries);
+    let pi = PROGRAM_INFO.get_or_init(init_program).await;
+    if pi.cli.log == CliLog::Full {
+        dbg!(&dict_entries);
+    }
 
     if dict_entries.is_empty() {
         let fallback_entries =
@@ -224,14 +222,14 @@ pub async fn query_database(term: &str, reading: &str) -> color_eyre::Result<Vec
 
     query_entries.par_sort_unstable_by(|a, b| {
         let order = &pi.sort;
-        // We now compare the source string directly with the strings in the sort order.
+        // cmp the source string with the strings in the sort order.
         let a_index = order
             .iter()
-            .position(|x| x == &a.source) // Simple string comparison
+            .position(|x| x == &a.source) 
             .unwrap_or(order.len());
         let b_index = order
             .iter()
-            .position(|x| x == &b.source) // Simple string comparison
+            .position(|x| x == &b.source) 
             .unwrap_or(order.len());
         a_index.cmp(&b_index)
     });
