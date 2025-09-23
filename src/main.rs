@@ -124,14 +124,18 @@ impl Deref for AudioSourceMap {
         &self.map
     }
 }
-
 impl DerefMut for AudioSourceMap {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.map
     }
 }
 
+struct DirectoryLayout {
+    has_top_level_audio: bool,
+    subdirs: Vec<PathBuf>,
+}
 impl AudioSourceMap {
+    /// The main entry point. Iterates through the top-level directories in the audio folder.
     async fn create_source_map(audio_dir: &Path, db: &SqlitePool) -> Option<Self> {
         if !audio_dir.exists() {
             return None;
@@ -142,89 +146,115 @@ impl AudioSourceMap {
             return None;
         };
 
-        'dir_loop: for entry in entries.flatten() {
-            let Ok(file_type) = entry.file_type() else {
-                continue;
-            };
-            if !file_type.is_dir() {
-                continue;
-            }
-
-            let dir_path = entry.path();
-            let dir_name_os = dir_path.file_name().unwrap_or_default();
-            let dir_name = dir_name_os.to_string_lossy();
-
-            // --- Standard Indexing Logic ---
-            let index_path = dir_path.join("index.json");
-            if index_path.exists() {
-                if let Ok(source_name) = indexing::index_file(db, &index_path).await {
-                    audio_source_map.insert(source_name, dir_path);
-                }
-                continue 'dir_loop;
-            }
-
-            let entries_json_path = dir_path.join("entries.json");
-            if entries_json_path.exists() {
-                ceprintln!("<y>[warn]</> Directory '{}' contains 'entries.json'. Please rename to 'index.json'.", dir_name);
-                continue 'dir_loop;
-            }
-
-            // --- New Multi-Source and Auto-Indexing Logic ---
-            let mut subdirs = vec![];
-            let mut has_top_level_audio = false;
-
-            // Check contents of the directory one level deep
-            if let Ok(mut dir_contents) = read_dir(&dir_path) {
-                while let Some(Ok(sub_entry)) = dir_contents.next() {
-                    if sub_entry.path().is_dir() {
-                        subdirs.push(sub_entry.path());
-                    } else if let Some(ext) = sub_entry.path().extension().and_then(|s| s.to_str())
-                    {
-                        if ["mp3", "wav", "ogg", "flac", "mp4"]
-                            .contains(&ext.to_lowercase().as_str())
-                        {
-                            has_top_level_audio = true;
-                        }
-                    }
-                }
-            }
-
-            if has_top_level_audio {
-                // Case 1: Audio files are directly inside. Treat this as one source.
-                if let Ok(new_path) =
-                    indexing::create_index_from_directory(&dir_path, &dir_name).await
-                {
-                    if let Ok(source_name) = indexing::index_file(db, &new_path).await {
-                        audio_source_map.insert(source_name, dir_path);
-                    }
-                }
-            } else if !subdirs.is_empty() {
-                // Case 2: No top-level audio, but subdirectories exist. Treat each as a source.
-                ceprintln!("<cyan>[multi-source]</> Scanning inside '{}'...", dir_name);
-                for sub_dir_path in subdirs {
-                    let sub_dir_name = sub_dir_path
-                        .file_name()
-                        .unwrap_or_default()
-                        .to_string_lossy();
-                    let combined_source_name = format!("{}-{}", dir_name, sub_dir_name);
-
-                    if let Ok(new_path) =
-                        indexing::create_index_from_directory(&sub_dir_path, &combined_source_name)
-                            .await
-                    {
-                        if let Ok(source_name) = indexing::index_file(db, &new_path).await {
-                            audio_source_map.insert(source_name, sub_dir_path);
-                        }
-                    }
-                }
-            } else {
-                ceprintln!(
-                    "<y>[warn]</> Skipping directory '{}' (no index or audio files found).",
-                    dir_name
-                );
+        for entry in entries.flatten() {
+            if entry.path().is_dir() {
+                // Process each directory individually.
+                audio_source_map.process_directory(&entry.path(), db).await;
             }
         }
         Some(audio_source_map)
+    }
+
+    /// Determines how to handle a single directory.
+    async fn process_directory(&mut self, dir_path: &Path, db: &SqlitePool) {
+        let dir_name_os = dir_path.file_name().unwrap_or_default();
+        let dir_name = dir_name_os.to_string_lossy();
+
+        // Case 1: An 'index.json' already exists. This is the highest priority.
+        let index_path = dir_path.join("index.json");
+        if index_path.exists() {
+            if let Ok(source_name) = indexing::index_file(db, &index_path).await {
+                self.insert(source_name, dir_path.to_path_buf());
+            }
+            return;
+        }
+
+        // Case 2: An 'entries.json' exists. Warn the user and skip.
+        let entries_json_path = dir_path.join("entries.json");
+        if entries_json_path.exists() {
+            ceprintln!("<y>[warn]</> Directory '{}' contains 'entries.json'. Please rename to 'index.json'.", dir_name);
+            return;
+        }
+
+        // Case 3: No index file. Analyze the directory contents to decide the next step.
+        let layout = self.analyze_directory_contents(dir_path);
+
+        if layout.has_top_level_audio {
+            // Treat as a single source with audio files at its root.
+            self.handle_single_source_dir(dir_path, &dir_name, db).await;
+        } else if !layout.subdirs.is_empty() {
+            // Treat as a multi-source directory where each subdirectory is a source.
+            self.handle_multi_source_dir(&dir_name, &layout.subdirs, db)
+                .await;
+        } else {
+            ceprintln!(
+                "<y>[warn]</> Skipping directory '{}' (no index or audio files found).",
+                dir_name
+            );
+        }
+    }
+
+    /// Analyzes a directory's immediate contents to classify it.
+    fn analyze_directory_contents(&self, dir_path: &Path) -> DirectoryLayout {
+        let mut layout = DirectoryLayout {
+            has_top_level_audio: false,
+            subdirs: vec![],
+        };
+
+        if let Ok(dir_contents) = read_dir(dir_path) {
+            for entry in dir_contents.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    layout.subdirs.push(path);
+                } else if !layout.has_top_level_audio {
+                    if let Some(ext) = path.extension().and_then(OsStr::to_str) {
+                        if ["mp3", "wav", "ogg", "flac", "mp4"]
+                            .contains(&ext.to_lowercase().as_str())
+                        {
+                            layout.has_top_level_audio = true;
+                        }
+                    }
+                }
+            }
+        }
+        layout
+    }
+
+    /// Handles a directory with audio files directly inside it.
+    async fn handle_single_source_dir(&mut self, dir_path: &Path, dir_name: &str, db: &SqlitePool) {
+        if let Ok(new_path) = indexing::create_index_from_directory(dir_path, dir_name).await {
+            if let Ok(source_name) = indexing::index_file(db, &new_path).await {
+                self.insert(source_name, dir_path.to_path_buf());
+            }
+        }
+    }
+
+    /// Handles a directory that contains multiple source subdirectories.
+    async fn handle_multi_source_dir(
+        &mut self,
+        parent_name: &str,
+        subdirs: &[PathBuf],
+        db: &SqlitePool,
+    ) {
+        ceprintln!(
+            "<cyan>[multi-source]</> Scanning inside '{}'...",
+            parent_name
+        );
+        for sub_dir_path in subdirs {
+            let sub_dir_name = sub_dir_path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy();
+            let combined_source_name = format!("{}-{}", parent_name, sub_dir_name);
+
+            if let Ok(new_path) =
+                indexing::create_index_from_directory(sub_dir_path, &combined_source_name).await
+            {
+                if let Ok(source_name) = indexing::index_file(db, &new_path).await {
+                    self.insert(source_name, sub_dir_path.clone());
+                }
+            }
+        }
     }
 }
 
@@ -243,8 +273,6 @@ pub(crate) async fn init_program() -> ProgramInfo {
     print_arg("port", &cli.port.inner);
     print_arg("log", cli.log);
 
-    // --- THIS IS THE FIX ---
-    // Connect to the database. The `rwc` (read/write/create) mode will automatically
     // create the `entries.db` file if it does not exist. The old logic that
     // overwrote the database on every startup has been removed.
     let db = SqlitePool::connect("sqlite:entries.db?mode=rwc")
@@ -252,10 +280,7 @@ pub(crate) async fn init_program() -> ProgramInfo {
         .expect("Failed to connect to database. Ensure you have write permissions.");
 
     let audio_source_map = match AudioSourceMap::create_source_map(&cli.audio, &db).await {
-        // The `if !map.is_empty()` part is a "match guard".
-        // This arm only executes if we get `Some(map)` AND the map is NOT empty.
         Some(map) if !map.is_empty() => map,
-        // 1. None & 2. Some(map) where the map IS empty.
         _ => {
             ceprintln!(
                 "<r>[panic]</> No recognizable audio source folders found in '{}'",
