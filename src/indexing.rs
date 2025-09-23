@@ -163,8 +163,7 @@ pub async fn index_file(pool: &SqlitePool, index_path: &Path) -> Result<String> 
     let reader = BufReader::new(file);
 
     // Now, this line can parse BOTH formats of index.json files!
-    let index_json: IndexJson = serde_json::from_reader(reader)
-        .with_context(|| format!("invalid 'index.json' at: {index_path:?}"))?;
+    let index_json: IndexJson = serde_json::from_reader(reader)?;
 
     let mut src_name = index_json.meta.name;
     src_name = src_name

@@ -163,8 +163,16 @@ impl AudioSourceMap {
         // Case 1: An 'index.json' already exists. This is the highest priority.
         let index_path = dir_path.join("index.json");
         if index_path.exists() {
-            if let Ok(source_name) = indexing::index_file(db, &index_path).await {
-                self.insert(source_name, dir_path.to_path_buf());
+            match indexing::index_file(db, &index_path).await {
+                Ok(source_name) => {
+                    self.insert(source_name, dir_path.to_path_buf());
+                }
+                Err(e) => {
+                    ceprintln!(
+                        "<r>[parse-error] Failed to read {:?}:\n{e}</>",
+                        index_path,
+                    );
+                }
             }
             return;
         }
