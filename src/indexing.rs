@@ -153,8 +153,6 @@ async fn insert_entries(pool: &SqlitePool, entries: Vec<Entry>) -> Result<()> {
     Ok(())
 }
 
-// --- SECTION 3: Public API for Indexing ---
-
 /// The primary entry point for indexing a source from a JSON file.
 /// This function handles file parsing, data transformation, and database insertion.
 pub async fn index_file(pool: &SqlitePool, index_path: &Path) -> Result<String> {
