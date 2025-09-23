@@ -1,11 +1,15 @@
+use chrono::Datelike;
+use color_eyre::eyre::eyre;
 use color_eyre::{eyre::Context, Result};
 use color_print::ceprintln;
 use rapidhash::{HashMapExt, RapidHashMap as HashMap};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
+use walkdir::WalkDir;
+use std::ffi::OsStr;
 use std::fs::File;
 use std::io::BufReader;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// e.g., `{ "headwords": { "word1": ["file.mp3"], "word2": ["file2.mp3"] } }`
 #[derive(Debug, Serialize, Deserialize)]
@@ -162,7 +166,7 @@ pub async fn index_file(pool: &SqlitePool, index_path: &Path) -> Result<String> 
 
     // Now, this line can parse BOTH formats of index.json files!
     let index_json: IndexJson = serde_json::from_reader(reader)
-        .with_context(|| format!("cant parse JSON from: {index_path:?}"))?;
+        .with_context(|| format!("invalid 'index.json' at: {index_path:?}"))?;
 
     let mut src_name = index_json.meta.name;
     src_name = src_name
@@ -172,10 +176,8 @@ pub async fn index_file(pool: &SqlitePool, index_path: &Path) -> Result<String> 
         .replace(" ", "-")
         .to_string();
 
-    //println!("parsed index for source: '{src_name}'");
-
     if is_indexed(pool, &src_name).await? {
-        ceprintln!("<cyan>[skipping]:</> '{src_name}'");
+        ceprintln!("<cyan>[indexed]:</> '{src_name}'");
         return Ok(src_name);
     }
 
@@ -218,4 +220,50 @@ pub async fn is_indexed(pool: &SqlitePool, source_name: &str) -> Result<bool> {
         .with_context(|| "Database query failed while checking if source is indexed")?
         .is_some();
     Ok(result)
+}
+
+pub async fn create_index_from_directory(dir_path: &Path, source_name: &str) -> Result<PathBuf> {
+    ceprintln!("<cyan>[auto-generating index]</> for: {:?}", dir_path);
+
+    let mut headwords: HashMap<String, Vec<String>> = HashMap::new();
+    let audio_extensions = ["mp3", "wav", "ogg", "flac", "mp4"];
+
+    for entry in WalkDir::new(dir_path).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if path.is_file() {
+            if let Some(ext) = path.extension().and_then(OsStr::to_str) {
+                if audio_extensions.contains(&ext.to_lowercase().as_str()) {
+                    if let Some(stem) = path.file_stem().and_then(OsStr::to_str) {
+                        let Ok(relative_path) = path.strip_prefix(dir_path) else { continue };
+                        
+                        headwords
+                            .entry(stem.to_string())
+                            .or_default()
+                            .push(relative_path.to_string_lossy().into_owned());
+                    }
+                }
+            }
+        }
+    }
+
+    if headwords.is_empty() {
+        return Err(eyre!("No audio files found to generate index."));
+    }
+
+    let meta = Meta {
+        name: source_name.to_string(), // Use the provided source name
+        year: chrono::Utc::now().year() as usize,
+        version: 1,
+    };
+
+    let data = IndexData::Headwords(HeadwordsFormat { headwords });
+    let index_json = IndexJson { meta, data };
+
+    let output_path = dir_path.join("index.json");
+    let json_string = serde_json::to_string_pretty(&index_json)?;
+    std::fs::write(&output_path, json_string)?;
+
+    ceprintln!("<g>[generated]</> index.json at: {:?}", output_path);
+
+    Ok(output_path)
 }

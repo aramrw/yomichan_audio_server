@@ -23,7 +23,7 @@ use database::DatabaseEntry;
 use rapidhash::RapidHashMap;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Debug;
 use std::fs::{self, read_dir, File, FileType};
 use std::io::{self, Error, ErrorKind, Write};
@@ -38,6 +38,7 @@ use tracing::debug;
 use tracing_subscriber::EnvFilter;
 #[cfg(target_os = "windows")]
 use tray_item::{IconSource, TrayItem};
+use walkdir::WalkDir;
 
 #[macro_use]
 mod macros {
@@ -137,54 +138,90 @@ impl AudioSourceMap {
         }
 
         let mut audio_source_map = AudioSourceMap::default();
-        let entries = read_dir(audio_dir).ok()?;
+        let Ok(entries) = read_dir(audio_dir) else {
+            return None;
+        };
 
-        for entry in entries.flatten() {
+        'dir_loop: for entry in entries.flatten() {
             let Ok(file_type) = entry.file_type() else {
-                ceprintln!("<r>[error]</> could not get file type");
                 continue;
             };
-
             if !file_type.is_dir() {
                 continue;
             }
 
             let dir_path = entry.path();
+            let dir_name_os = dir_path.file_name().unwrap_or_default();
+            let dir_name = dir_name_os.to_string_lossy();
 
-            let maybe_json_path: Option<PathBuf> = fs::read_dir(&dir_path)
-                .ok() // Convert Result into an Option, discarding the error
-                .and_then(|read_dir| {
-                    read_dir
-                        .flatten() // Ignore entries that cause an error
-                        // Find the first entry that has a "json" extension
-                        .find(|entry| entry.path().extension().map_or(false, |ext| ext == "json"))
-                        // If an entry was found, get its path
-                        .map(|entry| entry.path())
-                });
-
-            // Now you can use the discovered path
-            let Some(found_path) = maybe_json_path else {
-                ceprintln!("<r>[error]</> No <r>.json</> file found in: <r>{dir_path:?}</>");
-                continue;
-            };
-
-            let index_path = found_path;
-
-            if !index_path.exists() {
-                continue;
-            }
-
-            match indexing::index_file(db, &index_path).await {
-                Ok(source_name) => {
+            // --- Standard Indexing Logic ---
+            let index_path = dir_path.join("index.json");
+            if index_path.exists() {
+                if let Ok(source_name) = indexing::index_file(db, &index_path).await {
                     audio_source_map.insert(source_name, dir_path);
                 }
-                Err(e) => {
-                    ceprintln!(
-                        "<r>[error]</> Failed to index source in {:?}: {}",
-                        dir_path,
-                        e
-                    );
+                continue 'dir_loop;
+            }
+
+            let entries_json_path = dir_path.join("entries.json");
+            if entries_json_path.exists() {
+                ceprintln!("<y>[warn]</> Directory '{}' contains 'entries.json'. Please rename to 'index.json'.", dir_name);
+                continue 'dir_loop;
+            }
+
+            // --- New Multi-Source and Auto-Indexing Logic ---
+            let mut subdirs = vec![];
+            let mut has_top_level_audio = false;
+
+            // Check contents of the directory one level deep
+            if let Ok(mut dir_contents) = read_dir(&dir_path) {
+                while let Some(Ok(sub_entry)) = dir_contents.next() {
+                    if sub_entry.path().is_dir() {
+                        subdirs.push(sub_entry.path());
+                    } else if let Some(ext) = sub_entry.path().extension().and_then(|s| s.to_str())
+                    {
+                        if ["mp3", "wav", "ogg", "flac", "mp4"]
+                            .contains(&ext.to_lowercase().as_str())
+                        {
+                            has_top_level_audio = true;
+                        }
+                    }
                 }
+            }
+
+            if has_top_level_audio {
+                // Case 1: Audio files are directly inside. Treat this as one source.
+                if let Ok(new_path) =
+                    indexing::create_index_from_directory(&dir_path, &dir_name).await
+                {
+                    if let Ok(source_name) = indexing::index_file(db, &new_path).await {
+                        audio_source_map.insert(source_name, dir_path);
+                    }
+                }
+            } else if !subdirs.is_empty() {
+                // Case 2: No top-level audio, but subdirectories exist. Treat each as a source.
+                ceprintln!("<cyan>[multi-source]</> Scanning inside '{}'...", dir_name);
+                for sub_dir_path in subdirs {
+                    let sub_dir_name = sub_dir_path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy();
+                    let combined_source_name = format!("{}-{}", dir_name, sub_dir_name);
+
+                    if let Ok(new_path) =
+                        indexing::create_index_from_directory(&sub_dir_path, &combined_source_name)
+                            .await
+                    {
+                        if let Ok(source_name) = indexing::index_file(db, &new_path).await {
+                            audio_source_map.insert(source_name, sub_dir_path);
+                        }
+                    }
+                }
+            } else {
+                ceprintln!(
+                    "<y>[warn]</> Skipping directory '{}' (no index or audio files found).",
+                    dir_name
+                );
             }
         }
         Some(audio_source_map)
