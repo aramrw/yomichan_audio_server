@@ -12,7 +12,6 @@ http://localhost:8080/?term={term}&reading={reading}
 - **Pro Tip:** For a massive collection of 1.2M+ files, check out the **[Ultimate Audio Source](https://github.com/aramrw/yomichan_audio_server/issues/13)** (requires [7-Zip](https://www.7-zip.org/) to extract).
 - Create an `audio/` folder and put the audio files inside that folder.
 Make sure it looks like this 👇
-```
 yomichan_audio_server_v0.1.2/ <- this can be any folder
 ├── audio/
 │   ├── daijisen/media
@@ -21,8 +20,23 @@ yomichan_audio_server_v0.1.2/ <- this can be any folder
 │   ├── shinmeikai8/media
 │   ├── forvo_jp/
 │   ├── forvo_zh/
+│   ├── ozk5_files/       <-- New sources
+│   ├── taas_files/
 ├── yomichan_audio_server.exe
+├── entries.db            <-- Database file
 ```
+
+### Ultimate Audio Source Setup (Important!)
+If you are using the massive "Ultimate Audio Source" pack:
+1. Extract the zip contents into your `audio/` folder.
+2. The zip includes an `entry_and_pitch_db.sql` file. You **MUST** import this into your `entries.db` for the server to recognize the new files.
+   - Install **[SQLite](https://sqlite.org/download.html)**.
+   - Open a terminal in the folder and run:
+     ```bash
+     sqlite3 entries.db ".read entry_and_pitch_db.sql"
+     ```
+   - This may take 10-20 minutes depending on your disk speed.
+3. Once finished, ensure `entries.db` is present next to the executable.
 ### Sorting
 - create a `sort.txt` file where the exe is
 - run program with `--sources` to see sources list
