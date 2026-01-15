@@ -132,6 +132,16 @@ pub enum AudioSource {
     ForvoJp,
     #[sqlx(rename = "forvo_zh")]
     ForvoZh,
+    #[sqlx(rename = "forvo")]
+    Forvo,
+    #[sqlx(rename = "ozk5")]
+    Ozk5,
+    #[sqlx(rename = "taas")]
+    Taas,
+    #[sqlx(rename = "forvo_ext")]
+    ForvoExt,
+    #[sqlx(rename = "forvo_ext2")]
+    ForvoExt2,
     Other,
 }
 
@@ -140,6 +150,11 @@ impl std::fmt::Display for AudioSource {
         let dbg = match self {
             Self::ForvoJp => "forvo_jp",
             Self::ForvoZh => "forvo_zh",
+            Self::Forvo => "forvo_files",
+            Self::Ozk5 => "ozk5_files",
+            Self::Taas => "taas_files",
+            Self::ForvoExt => "forvo_ext_files",
+            Self::ForvoExt2 => "forvo_ext2_files",
             _ => &format!("{self:?}").to_lowercase(),
         };
         write!(f, "{dbg}")
@@ -150,12 +165,17 @@ impl FromStr for AudioSource {
     type Err = AudioSourceError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "forvo" | "forvo_jp" => Ok(AudioSource::ForvoJp),
+            "forvo_jp" => Ok(AudioSource::ForvoJp),
             "forvo_zh" => Ok(AudioSource::ForvoZh),
+            "forvo" => Ok(AudioSource::Forvo),
             "shinmeikai8" => Ok(AudioSource::Shinmeikai8),
             "nhk16" => Ok(AudioSource::Nhk16),
             "daijisen" => Ok(AudioSource::Daijisen),
             "jpod" => Ok(AudioSource::Jpod),
+            "ozk5" => Ok(AudioSource::Ozk5),
+            "taas" => Ok(AudioSource::Taas),
+            "forvo_ext" => Ok(AudioSource::ForvoExt),
+            "forvo_ext2" => Ok(AudioSource::ForvoExt2),
             _ => Ok(AudioSource::Other), // Err(AudioSourceError::UnkownSource { src: s.to_string() }),
         }
     }
