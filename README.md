@@ -26,6 +26,10 @@ yomichan_audio_server_v0.1.2/ <- this can be any folder
 - create a `sort.txt` file where the exe is
 - run program with `--sources` to see sources list
 - add at least 1 source on each line
+### Performance
+- On first startup, the server builds a file cache of all audio files, which is saved to `audio_cache.json`
+- Subsequent startups load from the cache for faster initialization
+- If you add/remove audio files, delete `audio_cache.json` to rebuild the cache
 ### Issues: 
 - If you are having problems, run the program with `--log full`
 - Make sure to include the operating system and send bug reports in **[Issues](https://github.com/aramrw/yomichan_audio_server/issues)**.

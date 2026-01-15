@@ -40,6 +40,7 @@ pub(crate) struct ProgramInfo {
     pub cli: Cli,
     pub db: SqlitePool,
     pub sort: Vec<AudioSource>,
+    pub file_cache: HashMap<String, PathBuf>,
 }
 
 pub(crate) static PROGRAM_INFO: OnceCell<ProgramInfo> = OnceCell::const_new();
@@ -62,18 +63,21 @@ async fn init_program() -> ProgramInfo {
     print_arg("port", &cli.port.inner);
     print_arg("log", cli.log);
 
-    // init database
-    let buf = include_bytes!("../entries.db");
-    let mut db_file = std::fs::OpenOptions::new()
-        .write(true)
-        .truncate(true)
-        .create(true)
-        .open("entries.db")
-        .unwrap();
-    db_file.write_all(buf).unwrap();
+    // init database - use existing entries.db file
+    if !dbpath.exists() {
+        eprintln!("ERROR: entries.db not found in working directory!");
+        std::process::exit(1);
+    }
     let db = SqlitePool::connect("entries.db").await.unwrap();
 
     let sort = AudioSource::read_sort_file();
+    
+    // Build file cache at startup for fast lookups
+    cprintln!("<cyan>[info]</> Building audio file cache...");
+    let cache_start = std::time::Instant::now();
+    let file_cache = build_file_cache(&cli.audio);
+    cprintln!("<g>[done]</> Cached {} files in {:.2}s", file_cache.len(), cache_start.elapsed().as_secs_f64());
+    
     ProgramInfo {
         pkg_name,
         version,
@@ -81,7 +85,56 @@ async fn init_program() -> ProgramInfo {
         cli,
         db,
         sort,
+        file_cache,
     }
+}
+
+/// Recursively walks the audio directory and builds a cache of filename -> full path
+/// Cache is persisted to disk to avoid rebuilding on every launch
+fn build_file_cache(audio_dir: &Path) -> HashMap<String, PathBuf> {
+    use rayon::prelude::*;
+    
+    let cache_file = Path::new("./audio_cache.json");
+    
+    // Try to load existing cache
+    if cache_file.exists() {
+        if let Ok(cache_contents) = std::fs::read_to_string(cache_file) {
+            if let Ok(cache) = serde_json::from_str::<HashMap<String, PathBuf>>(&cache_contents) {
+                cprintln!("<g>[cache]</> Loaded {} files from cache", cache.len());
+                return cache;
+            }
+        }
+    }
+    
+    // Cache doesn't exist or is invalid, build it
+    fn walk_dir(dir: &Path, cache: &mut HashMap<String, PathBuf>) {
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    walk_dir(&path, cache);
+                } else if path.is_file() {
+                    if let Some(filename) = path.file_name() {
+                        let filename_str = filename.to_string_lossy().to_string();
+                        // Only cache audio files, don't overwrite existing entries
+                        // (first found wins, matching the original search behavior)
+                        cache.entry(filename_str).or_insert(path);
+                    }
+                }
+            }
+        }
+    }
+    
+    let mut cache = HashMap::new();
+    walk_dir(audio_dir, &mut cache);
+    
+    // Save cache to disk for next startup
+    if let Ok(cache_json) = serde_json::to_string(&cache) {
+        let _ = std::fs::write(cache_file, cache_json);
+        cprintln!("<g>[cache]</> Saved {} files to cache", cache.len());
+    }
+    
+    cache
 }
 
 #[actix_web::main]
