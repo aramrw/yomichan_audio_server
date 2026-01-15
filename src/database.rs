@@ -67,7 +67,7 @@ impl DatabaseEntry {
         })
     }
 
-    // Construct the audio source based on the file path
+    // Construct the audio source based on the file path - uses file cache for fast lookup
     pub fn to_audio_result(&self) -> Result<AudioResult, AudioFileError> {
         let pi = PROGRAM_INFO.get().unwrap();
         let DatabaseEntry {
@@ -77,20 +77,21 @@ impl DatabaseEntry {
             ..
         } = self;
 
-        // Build the directory using the CLI-supplied audio folder.
-        let read_dir = pi.cli.audio.join(source.to_string());
-
-        // First try: <cli_audio>/<source>/media/<file>
-        let mut file_path = read_dir.join("media").join(file);
-
-        // Fallback: try <cli_audio>/<source>/<display>/<file>
-        if !file_path.exists() {
-            file_path = read_dir.join(&self.display).join(file);
-            if !file_path.exists() {
-                // If still not found, try custom finder using the read_dir
-                file_path = self.find_audio_file(&read_dir)?;
+        // Try to find the file in the cache first (fast path)
+        let file_path = if let Some(cached_path) = pi.file_cache.get(file) {
+            cached_path.clone()
+        } else {
+            // Fallback to slow filesystem search if not in cache
+            let read_dir = pi.cli.audio.join(source.to_string());
+            let mut found_path = read_dir.join("media").join(file);
+            if !found_path.exists() {
+                found_path = read_dir.join(&self.display).join(file);
+                if !found_path.exists() {
+                    found_path = self.find_audio_file(&read_dir)?;
+                }
             }
-        }
+            found_path
+        };
 
         // Compute the relative path from the CLI audio folder so the URL uses the alias.
         let relative_path = file_path.strip_prefix(&pi.cli.audio).unwrap_or(&file_path);
@@ -131,6 +132,16 @@ pub enum AudioSource {
     ForvoJp,
     #[sqlx(rename = "forvo_zh")]
     ForvoZh,
+    #[sqlx(rename = "forvo")]
+    Forvo,
+    #[sqlx(rename = "ozk5")]
+    Ozk5,
+    #[sqlx(rename = "taas")]
+    Taas,
+    #[sqlx(rename = "forvo_ext")]
+    ForvoExt,
+    #[sqlx(rename = "forvo_ext2")]
+    ForvoExt2,
     Other,
 }
 
@@ -139,6 +150,11 @@ impl std::fmt::Display for AudioSource {
         let dbg = match self {
             Self::ForvoJp => "forvo_jp",
             Self::ForvoZh => "forvo_zh",
+            Self::Forvo => "forvo_files",
+            Self::Ozk5 => "ozk5_files",
+            Self::Taas => "taas_files",
+            Self::ForvoExt => "forvo_ext_files",
+            Self::ForvoExt2 => "forvo_ext2_files",
             _ => &format!("{self:?}").to_lowercase(),
         };
         write!(f, "{dbg}")
@@ -149,12 +165,17 @@ impl FromStr for AudioSource {
     type Err = AudioSourceError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "forvo" | "forvo_jp" => Ok(AudioSource::ForvoJp),
+            "forvo_jp" => Ok(AudioSource::ForvoJp),
             "forvo_zh" => Ok(AudioSource::ForvoZh),
+            "forvo" => Ok(AudioSource::Forvo),
             "shinmeikai8" => Ok(AudioSource::Shinmeikai8),
             "nhk16" => Ok(AudioSource::Nhk16),
             "daijisen" => Ok(AudioSource::Daijisen),
             "jpod" => Ok(AudioSource::Jpod),
+            "ozk5" => Ok(AudioSource::Ozk5),
+            "taas" => Ok(AudioSource::Taas),
+            "forvo_ext" => Ok(AudioSource::ForvoExt),
+            "forvo_ext2" => Ok(AudioSource::ForvoExt2),
             _ => Ok(AudioSource::Other), // Err(AudioSourceError::UnkownSource { src: s.to_string() }),
         }
     }
