@@ -18,6 +18,7 @@ use color_print::{ceprintln, cprintln};
 use config::spawn_headless;
 use database::{AudioSource, DatabaseEntry};
 use json::eprint_pretty;
+use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::ffi::OsString;
 use std::fmt::Debug;
@@ -89,15 +90,45 @@ async fn init_program() -> ProgramInfo {
     }
 }
 
+/// Metadata to track changes. We only track the top-level folder modification time
+/// and the count of items in it to detect added/removed source folders quickly.
+#[derive(Serialize, Deserialize)]
+struct CacheMetadata {
+    last_modified: std::time::SystemTime,
+}
+
 /// Recursively walks the audio directory and builds a cache of filename -> full path
-/// Cache is persisted to disk to avoid rebuilding on every launch
+/// Cache is persisted to disk and automatically rebuilds when top-level audio directory changes
 fn build_file_cache(audio_dir: &Path) -> HashMap<String, PathBuf> {
     use rayon::prelude::*;
     
     let cache_file = Path::new("./audio_cache.json");
+    let metadata_file = Path::new("./audio_cache_metadata.json");
     
-    // Try to load existing cache
-    if cache_file.exists() {
+    // Only look at the audio directory itself
+    // This catches adding/removing source folders, which is the main use case
+    let current_modified = audio_dir.metadata().and_then(|m| m.modified()).unwrap_or(std::time::SystemTime::now());
+    
+    let should_rebuild = (|| {
+        // Try to read and parse metadata
+        let meta_contents = std::fs::read_to_string(metadata_file).ok()?;
+        let metadata = serde_json::from_str::<CacheMetadata>(&meta_contents).ok()?;
+        
+        // If the modification time of 'audio/' is different, something changed
+        let changed = metadata.last_modified != current_modified;
+        if changed {
+            cprintln!("<y>[cache]</> Audio library changed, rebuilding cache...");
+        }
+        
+        // Return true if changed, false if not changed
+        // This is wrapped in Some(bool) which the closure returns
+        Some(changed)
+    })()
+    // If any step failed (returned None), default to true (rebuild)
+    .unwrap_or(true);
+    
+    // Try to load existing cache if valid
+    if !should_rebuild {
         if let Ok(cache_contents) = std::fs::read_to_string(cache_file) {
             if let Ok(cache) = serde_json::from_str::<HashMap<String, PathBuf>>(&cache_contents) {
                 cprintln!("<g>[cache]</> Loaded {} files from cache", cache.len());
@@ -132,6 +163,12 @@ fn build_file_cache(audio_dir: &Path) -> HashMap<String, PathBuf> {
     if let Ok(cache_json) = serde_json::to_string(&cache) {
         let _ = std::fs::write(cache_file, cache_json);
         cprintln!("<g>[cache]</> Saved {} files to cache", cache.len());
+    }
+    
+    // Save metadata (only the root dir modified time)
+    let metadata = CacheMetadata { last_modified: current_modified };
+    if let Ok(metadata_json) = serde_json::to_string(&metadata) {
+        let _ = std::fs::write(metadata_file, metadata_json);
     }
     
     cache
