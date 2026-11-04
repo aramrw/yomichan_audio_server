@@ -1,3 +1,12 @@
+### Sunset (November 4, 2026)
+> Because of the lack of consistent ways maintain and index large amounts of audio files for multiple languages, I'm gonna sunset this project to focus on my other projects that are more multi-language friendly instead of just Japanese.
+>
+> Even though this project works with any language, online scrapes of places like forvo are not consistently maintained with proper index files, or completely ambigous, if their metadata is lost the files are useless if not properly descripted. I recommend either forking it and maintaing your own fork, or using other projects such as the [Yomitan Ultimate Audio Source](https://animecards.site/yomitan_audio/), or rewriting it from scratch (no mention necessary). Sorry.
+>
+> I may un-sunset it in the future if it becomes easier to download consistent high quality audio across multiple languages, or if you know a source that does so, please let me know.
+
+---
+
 _(iOS compatible audio files)_
 ### Add Audio Server to Yomichan/Yomitan
 ```
